@@ -9,7 +9,7 @@ from PIL import Image, ExifTags
 
 app = Flask(__name__)
 
-IMAGE_SCRIPT = os.path.join(os.path.dirname(__file__), 'image.py')
+IMAGE_SCRIPT = os.path.join(os.path.dirname(__file__), 'display_image.py')
 
 @app.route('/upload', methods=['POST'])
 def upload_image():
@@ -47,13 +47,13 @@ def upload_image():
             img.save(tmp_path)
         except Exception as e:
             print(f"Error auto-orienting image: {e}")
-        # Call the image.py script
+        # Call the display_image.py script
         result = subprocess.run([sys.executable, IMAGE_SCRIPT, tmp_path], capture_output=True, text=True)
         if result.returncode != 0:
-            print(f"image.py failed: {result.stderr}")
+            print(f"display_image.py failed: {result.stderr}")
             os.remove(tmp_path)
-            return jsonify({'error': 'image.py failed', 'details': result.stderr}), 500
-        print("image.py executed successfully.")
+            return jsonify({'error': 'display_image.py failed', 'details': result.stderr}), 500
+        print("display_image.py executed successfully.")
         os.remove(tmp_path)
         return jsonify({'status': 'success'}), 200
     except Exception as e:

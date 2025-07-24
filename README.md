@@ -9,7 +9,7 @@ This project contains three main applications:
 ### 1. Image Receiver Server (`image_receiver_server.py`)
 A Flask web server that receives uploaded images and processes them for display on e-paper.
 
-### 2. E-Paper Image Display (`image.py`)
+### 2. E-Paper Image Display (`display_image.py`)
 A standalone script for displaying images on a 13.3-inch e-paper display with automatic scaling and rotation.
 
 ### 3. Calendar Web Application (`calendar_server.py`)
@@ -93,16 +93,16 @@ The standalone script for displaying images on e-paper displays.
 
 **Basic usage:**
 ```bash
-python3 image.py path/to/your/image.png
+python3 display_image.py path/to/your/image.png
 ```
 
 **Advanced options:**
 ```bash
 # Display with zoom-to-fit (may crop image)
-python3 image.py image.png --zoom-to-fit
+python3 display_image.py image.png --zoom-to-fit
 
 # Display for 10 seconds
-python3 image.py image.png --sleep-time 10
+python3 display_image.py image.png --sleep-time 10
 ```
 
 **Command line arguments:**
@@ -176,6 +176,13 @@ The e-paper display configuration is handled by the libraries in `/lib`:
 - **google-auth-httplib2==0.1.1** - HTTP transport
 - **google-api-python-client==2.108.0** - Google API client
 
+### System Dependencies
+- **chromium-browser** - Required for calendar screenshot functionality in `calendar_sync_service.py`
+  ```bash
+  sudo apt update
+  sudo apt install chromium-browser
+  ```
+
 ### Hardware Libraries
 - **epd13in3E.py** - E-paper display interface
 - **epdconfig.py** - Hardware configuration
@@ -186,7 +193,7 @@ The e-paper display configuration is handled by the libraries in `/lib`:
 ```
 ecal/
 ├── calendar_server.py         # Calendar web application
-├── image.py                   # E-paper image display script
+├── display_image.py           # E-paper image display script
 ├── image_receiver_server.py   # Flask web server
 ├── requirements.txt           # Python dependencies
 ├── README.md                 # This file
@@ -215,7 +222,7 @@ python3 calendar_server.py
 
 ### Testing
 - Test image upload: `curl -X POST -F "file=@test.png" http://localhost:8000/upload`
-- Test e-paper display: `python3 image.py test.png`
+- Test e-paper display: `python3 display_image.py test.png`
 - Test calendar app: Visit `http://localhost:5000` after starting `calendar_server.py`
 
 ## Troubleshooting
@@ -224,7 +231,7 @@ python3 calendar_server.py
 
 1. **Import errors for epd13in3E:**
    - Ensure `/lib` directory contains all required files
-   - Check that `sys.path.append(libdir)` is working in `image.py`
+   - Check that `sys.path.append(libdir)` is working in `display_image.py`
 
 2. **Permission errors with hardware:**
    - Run with appropriate permissions for GPIO access
