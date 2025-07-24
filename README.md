@@ -31,7 +31,9 @@ A background service that monitors calendar changes, takes screenshots of the ca
 ## Hardware Requirements
 
 - **E-paper display**: 13.3-inch e-paper display (compatible with epd13in3E library)
-- **Raspberry Pi**: Recommended for hardware interface
+- **Two Raspberry Pis**: Recommended for distributed deployment
+  - **Display Pi**: Low-memory Pi connected to e-paper display
+  - **Compute Pi**: Higher-memory Pi for calendar processing
 - **Required libraries**: Custom e-paper display libraries in `/lib` directory
 
 ## Installation
@@ -65,6 +67,66 @@ A background service that monitors calendar changes, takes screenshots of the ca
    - Create a Google Cloud project and enable Calendar API
    - Download service account key as `service-account-key.json`
    - The app will automatically create `settings.json` on first run
+
+## Deployment Configuration
+
+This system is designed for deployment across two Raspberry Pis:
+
+### Display Pi (Low Memory)
+- **Purpose**: Connected to e-paper display, runs lightweight image server
+- **Applications**: `image_receiver_server.py` only
+- **Network**: Receives image uploads from Compute Pi
+- **Hardware**: E-paper display, minimal RAM requirements
+
+### Compute Pi (Higher Memory)
+- **Purpose**: Calendar processing and web interface
+- **Applications**: `calendar_server.py`, `calendar_sync_service.py`
+- **Network**: Sends screenshots to Display Pi
+- **Hardware**: More RAM for calendar processing and web serving
+
+### Network Configuration
+- **Display Pi**: Runs image server on port 8000
+- **Compute Pi**: Runs calendar server on port 5000
+- **Communication**: Compute Pi uploads screenshots to Display Pi's image server
+
+### Automatic Startup Installation
+Use the provided installation scripts to set up automatic startup:
+
+**On Display Pi:**
+```bash
+sudo ./scripts/install_display_pi.sh
+```
+
+**On Compute Pi:**
+```bash
+sudo ./scripts/install_compute_pi.sh
+```
+
+These scripts will:
+- Install required system dependencies
+- Set up systemd services for automatic startup
+- Configure network settings
+- Enable services to start on boot
+
+### Uninstalling Services
+To remove the automatic startup services:
+
+**On Display Pi:**
+```bash
+sudo systemctl stop ecal-image-server
+sudo systemctl disable ecal-image-server
+sudo rm /etc/systemd/system/ecal-image-server.service
+sudo systemctl daemon-reload
+```
+
+**On Compute Pi:**
+```bash
+sudo systemctl stop ecal-calendar-server ecal-calendar-sync
+sudo systemctl disable ecal-calendar-server ecal-calendar-sync
+sudo rm /etc/systemd/system/ecal-calendar-server.service
+sudo rm /etc/systemd/system/ecal-calendar-sync.service
+sudo systemctl daemon-reload
+```
 
 ## Usage
 
@@ -224,6 +286,9 @@ ecal/
 ├── requirements.txt           # Python dependencies
 ├── README.md                 # This file
 ├── .gitignore                # Git ignore rules
+├── scripts/                  # Installation and utility scripts
+│   ├── install_display_pi.sh # Display Pi installation script
+│   └── install_compute_pi.sh # Compute Pi installation script
 ├── settings.json             # Calendar settings (auto-created)
 ├── service-account-key.json  # Google API credentials (user-provided)
 ├── templates/                # HTML templates
