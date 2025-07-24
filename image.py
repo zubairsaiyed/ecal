@@ -55,31 +55,52 @@ def display_image(image_path, zoom_to_fit=False):
             
             # Check if rotating would give better scaling
             original_width, original_height = Himage.size
+            display_width, display_height = epd13in3E.EPD_WIDTH, epd13in3E.EPD_HEIGHT
+            
+            # Calculate scaling factors for both orientations
             if zoom_to_fit:
                 # Zoom to fill (may crop) - use max scaling
-                normal_scale = max(epd13in3E.EPD_WIDTH / original_width, epd13in3E.EPD_HEIGHT / original_height)
-                rotated_scale = max(epd13in3E.EPD_WIDTH / original_height, epd13in3E.EPD_HEIGHT / original_width)
+                normal_scale = max(display_width / original_width, display_height / original_height)
+                rotated_scale = max(display_width / original_height, display_height / original_width)
                 print("Using zoom-to-fit mode (may crop image)")
             else:
                 # Fit without cropping - use min scaling
-                normal_scale = min(epd13in3E.EPD_WIDTH / original_width, epd13in3E.EPD_HEIGHT / original_height)
-                rotated_scale = min(epd13in3E.EPD_WIDTH / original_height, epd13in3E.EPD_HEIGHT / original_width)
+                normal_scale = min(display_width / original_width, display_height / original_height)
+                rotated_scale = min(display_width / original_height, display_height / original_width)
                 print("Using fit-without-crop mode")
             
             print(f"Normal scaling factor: {normal_scale:.2f}")
             print(f"Rotated scaling factor: {rotated_scale:.2f}")
             
-            # Use rotation if it provides better scaling (larger scale factor)
-            if rotated_scale > normal_scale:
-                print("Rotating image 90 degrees for better fit")
+            # Determine if rotation would be beneficial
+            # Only rotate if the rotated version provides significantly better scaling
+            # and the image aspect ratio is very different from display
+            should_rotate = False
+            if rotated_scale > normal_scale * 1.1:  # 10% improvement threshold
+                # Check if the image is significantly different in aspect ratio
+                image_ratio = original_width / original_height
+                display_ratio = display_width / display_height
+                ratio_difference = abs(image_ratio - display_ratio)
+                
+                if ratio_difference > 0.5:  # Only rotate if aspect ratios are quite different
+                    should_rotate = True
+                    print(f"Image ratio: {image_ratio:.2f}, Display ratio: {display_ratio:.2f}")
+                    print("Rotating image 90 degrees for better fit")
+                else:
+                    print("Image aspect ratio is close to display ratio, keeping original orientation")
+            else:
+                print("Normal orientation provides better or similar scaling")
+            
+            if should_rotate:
                 Himage = Himage.rotate(90, expand=True)
-                width_ratio = epd13in3E.EPD_WIDTH / Himage.size[0]
-                height_ratio = epd13in3E.EPD_HEIGHT / Himage.size[1]
+                # Recalculate scaling after rotation
+                width_ratio = display_width / Himage.size[0]
+                height_ratio = display_height / Himage.size[1]
                 scale_factor = max(width_ratio, height_ratio) if zoom_to_fit else min(width_ratio, height_ratio)
             else:
                 print("Using normal orientation")
-                width_ratio = epd13in3E.EPD_WIDTH / original_width
-                height_ratio = epd13in3E.EPD_HEIGHT / original_height
+                width_ratio = display_width / original_width
+                height_ratio = display_height / original_height
                 scale_factor = max(width_ratio, height_ratio) if zoom_to_fit else min(width_ratio, height_ratio)
             
             # Calculate new size maintaining aspect ratio
