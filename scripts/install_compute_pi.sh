@@ -19,10 +19,34 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 echo "Installing from: $SCRIPT_DIR"
 
+# Get the current user
+CURRENT_USER=$(whoami)
+echo "Current user: $CURRENT_USER"
+
+# Check if virtual environment exists
+if [ ! -d "$SCRIPT_DIR/venv" ]; then
+    echo "Warning: Virtual environment not found at $SCRIPT_DIR/venv"
+    echo "Please create it first with:"
+    echo "  python3 -m venv venv"
+    echo "  source venv/bin/activate"
+    echo "  pip install -r requirements.txt"
+    echo ""
+    read -p "Continue anyway? (y/N): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "Installation cancelled."
+        exit 1
+    fi
+fi
+
 # Install system dependencies
 echo "Installing system dependencies..."
 apt update
 apt install -y chromium-browser
+
+# Create log directory
+mkdir -p /var/log/ecal
+chown $CURRENT_USER:$CURRENT_USER /var/log/ecal
 
 # Create calendar server systemd service file
 cat > /etc/systemd/system/ecal-calendar-server.service << EOF
@@ -33,12 +57,14 @@ Wants=network.target
 
 [Service]
 Type=simple
-User=pi
+User=$CURRENT_USER
 WorkingDirectory=$SCRIPT_DIR
 Environment=PATH=$SCRIPT_DIR/venv/bin
 ExecStart=$SCRIPT_DIR/venv/bin/python3 $SCRIPT_DIR/calendar_server.py
 Restart=always
 RestartSec=10
+StandardOutput=append:/var/log/ecal/calendar-server.log
+StandardError=append:/var/log/ecal/calendar-server.log
 
 [Install]
 WantedBy=multi-user.target
@@ -53,12 +79,14 @@ Wants=ecal-calendar-server.service
 
 [Service]
 Type=simple
-User=pi
+User=$CURRENT_USER
 WorkingDirectory=$SCRIPT_DIR
 Environment=PATH=$SCRIPT_DIR/venv/bin
 ExecStart=$SCRIPT_DIR/venv/bin/python3 $SCRIPT_DIR/calendar_sync_service.py --scheduled
 Restart=always
 RestartSec=30
+StandardOutput=append:/var/log/ecal/calendar-sync.log
+StandardError=append:/var/log/ecal/calendar-sync.log
 
 [Install]
 WantedBy=multi-user.target
@@ -95,6 +123,8 @@ echo ""
 echo "To view logs:"
 echo "  sudo journalctl -u ecal-calendar-server -f"
 echo "  sudo journalctl -u ecal-calendar-sync -f"
+echo "  tail -f /var/log/ecal/calendar-server.log"
+echo "  tail -f /var/log/ecal/calendar-sync.log"
 echo ""
 echo "The calendar server will run on port 5000"
 echo "The sync service will upload screenshots to the Display Pi on port 8000"

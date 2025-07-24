@@ -128,6 +128,20 @@ sudo rm /etc/systemd/system/ecal-calendar-sync.service
 sudo systemctl daemon-reload
 ```
 
+### Troubleshooting Services
+If services are not starting properly, use the troubleshooting script:
+
+```bash
+sudo ./scripts/troubleshoot_services.sh
+```
+
+This script will:
+- Check service status and recent logs
+- Verify virtual environment setup
+- Check Python dependencies
+- Verify file permissions
+- Suggest specific fixes for common issues
+
 ## Usage
 
 ### Image Receiver Server
@@ -309,7 +323,8 @@ ecal/
 ├── .gitignore                # Git ignore rules
 ├── scripts/                  # Installation and utility scripts
 │   ├── install_display_pi.sh # Display Pi installation script
-│   └── install_compute_pi.sh # Compute Pi installation script
+│   ├── install_compute_pi.sh # Compute Pi installation script
+│   └── troubleshoot_services.sh # Service troubleshooting script
 ├── settings.json             # Calendar settings (auto-created)
 ├── service-account-key.json  # Google API credentials (user-provided)
 ├── templates/                # HTML templates

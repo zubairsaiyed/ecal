@@ -52,10 +52,15 @@ sudo systemctl status ecal-image-server
 sudo systemctl status ecal-calendar-server
 sudo systemctl status ecal-calendar-sync
 
-# View logs
+# View logs (systemd)
 sudo journalctl -u ecal-image-server -f
 sudo journalctl -u ecal-calendar-server -f
 sudo journalctl -u ecal-calendar-sync -f
+
+# View logs (file-based)
+tail -f /var/log/ecal/image-server.log
+tail -f /var/log/ecal/calendar-server.log
+tail -f /var/log/ecal/calendar-sync.log
 
 # Restart services
 sudo systemctl restart ecal-image-server
