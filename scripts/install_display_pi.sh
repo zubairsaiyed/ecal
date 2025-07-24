@@ -57,7 +57,8 @@ Wants=network.target
 Type=simple
 User=$CURRENT_USER
 WorkingDirectory=$PROJECT_DIR
-Environment=PATH=$PROJECT_DIR/venv/bin
+Environment=PATH=$PROJECT_DIR/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=PYTHONPATH=$PROJECT_DIR
 ExecStart=$PROJECT_DIR/venv/bin/python3 $PROJECT_DIR/image_receiver_server.py
 Restart=always
 RestartSec=10
