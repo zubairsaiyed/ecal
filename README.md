@@ -4,13 +4,16 @@ A Python-based system for displaying images and calendars on e-paper displays, w
 
 ## Applications
 
-This project contains two main applications:
+This project contains three main applications:
 
 ### 1. Image Receiver Server (`image_receiver_server.py`)
 A Flask web server that receives uploaded images and processes them for display on e-paper.
 
 ### 2. E-Paper Image Display (`image.py`)
 A standalone script for displaying images on a 13.3-inch e-paper display with automatic scaling and rotation.
+
+### 3. Calendar Web Application (`calendar_server.py`)
+A Flask web application for displaying Google Calendar events with customizable themes and settings.
 
 ## Features
 
@@ -19,6 +22,8 @@ A standalone script for displaying images on a 13.3-inch e-paper display with au
 - **E-paper display support** for 13.3-inch displays
 - **Smart image scaling** with rotation optimization
 - **Virtual environment support** for clean dependency management
+- **Google Calendar integration** with customizable themes
+- **Web-based settings management** for calendar preferences
 
 ## Hardware Requirements
 
@@ -52,6 +57,11 @@ A standalone script for displaying images on a 13.3-inch e-paper display with au
    - `epd13in3E.py`
    - `epdconfig.py`
    - `DEV_Config_*.so` files
+
+5. **Set up Google Calendar integration (optional):**
+   - Create a Google Cloud project and enable Calendar API
+   - Download service account key as `service-account-key.json`
+   - The app will automatically create `settings.json` on first run
 
 ## Usage
 
@@ -100,12 +110,54 @@ python3 image.py image.png --sleep-time 10
 - `--sleep-time` - Time to display the image in seconds (default: 3)
 - `--zoom-to-fit` - Scale to fill display (may crop). Default is to fit without cropping.
 
+### Calendar Web Application
+
+The web application provides a customizable calendar interface with Google Calendar integration.
+
+**Start the calendar app:**
+```bash
+python3 calendar_server.py
+```
+
+**Access the application:**
+- Main calendar: `http://localhost:5000`
+- Settings page: `http://localhost:5000/settings`
+
+**Features:**
+- Multiple calendar support with color coding
+- Customizable themes and display options
+- Web-based settings management
+- Automatic settings file creation
+
 ## Configuration
 
 ### Image Processing
 - **EXIF orientation**: Automatically corrected during upload
 - **Image scaling**: Smart scaling with rotation optimization
 - **Display modes**: Fit-without-crop (default) or zoom-to-fit
+
+### Calendar Configuration
+The application automatically creates a `settings.json` file on first run with sensible defaults. You can customize:
+
+- **Calendar IDs**: Add your Google Calendar IDs (comma-separated)
+- **Theme**: Choose from available calendar themes
+- **Display options**: Weekends, zoom level, row height, etc.
+- **Calendar colors**: Customize colors for each calendar
+
+**Example settings.json:**
+```json
+{
+  "theme": "spectra6",
+  "show_weekends": true,
+  "first_day": 0,
+  "zoom": 150,
+  "calendar_ids": "your-email@gmail.com, calendar-id@group.calendar.google.com",
+  "calendar_colors": {
+    "your-email@gmail.com": "vivid-blue",
+    "calendar-id@group.calendar.google.com": "vivid-red"
+  }
+}
+```
 
 ### Hardware Configuration
 The e-paper display configuration is handled by the libraries in `/lib`:
@@ -119,7 +171,7 @@ The e-paper display configuration is handled by the libraries in `/lib`:
 - **Flask==2.3.3** - Web framework
 - **Pillow==10.0.1** - Image processing
 - **requests==2.31.0** - HTTP library
-- **google-auth==2.23.4** - Google authentication (for future calendar features)
+- **google-auth==2.23.4** - Google authentication
 - **google-auth-oauthlib==1.1.0** - OAuth library
 - **google-auth-httplib2==0.1.1** - HTTP transport
 - **google-api-python-client==2.108.0** - Google API client
@@ -133,16 +185,22 @@ The e-paper display configuration is handled by the libraries in `/lib`:
 
 ```
 ecal/
-├── image.py                    # E-paper image display script
-├── image_receiver_server.py    # Flask web server
-├── requirements.txt            # Python dependencies
-├── README.md                  # This file
-├── .gitignore                 # Git ignore rules
-└── lib/                       # Hardware libraries
-    ├── epd13in3E.py          # E-paper display interface
-    ├── epdconfig.py          # Hardware configuration
-    ├── DEV_Config_*.so       # Binary libraries
-    └── __init__.py           # Package initialization
+├── calendar_server.py         # Calendar web application
+├── image.py                   # E-paper image display script
+├── image_receiver_server.py   # Flask web server
+├── requirements.txt           # Python dependencies
+├── README.md                 # This file
+├── .gitignore                # Git ignore rules
+├── settings.json             # Calendar settings (auto-created)
+├── service-account-key.json  # Google API credentials (user-provided)
+├── templates/                # HTML templates
+│   ├── calendar.html         # Calendar display template
+│   └── settings.html         # Settings page template
+└── lib/                      # Hardware libraries
+    ├── epd13in3E.py         # E-paper display interface
+    ├── epdconfig.py         # Hardware configuration
+    ├── DEV_Config_*.so      # Binary libraries
+    └── __init__.py          # Package initialization
 ```
 
 ## Development
@@ -152,11 +210,13 @@ Always use a virtual environment to ensure dependency isolation:
 ```bash
 source venv/bin/activate  # Activate before running
 python3 image_receiver_server.py
+python3 calendar_server.py
 ```
 
 ### Testing
 - Test image upload: `curl -X POST -F "file=@test.png" http://localhost:8000/upload`
 - Test e-paper display: `python3 image.py test.png`
+- Test calendar app: Visit `http://localhost:5000` after starting `calendar_server.py`
 
 ## Troubleshooting
 
@@ -177,6 +237,11 @@ python3 image_receiver_server.py
 
 ### Debug Mode
 Enable debug output by checking console messages for detailed information about image processing and display operations.
+
+### Calendar Issues
+- **No events showing**: Check that `service-account-key.json` exists and has proper permissions
+- **Settings not saving**: Ensure `settings.json` is writable and not corrupted
+- **Authentication errors**: Verify Google Cloud project has Calendar API enabled
 
 ## License
 

@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #181920; color: #f8f8f2; margin: 0; padding: 40px; }
+        .settings-container { max-width: 500px; margin: 0 auto; background: #23272b; border-radius: 8px; padding: 32px; box-shadow: 0 2px 8px #0003; }
+        h1 { text-align: center; }
+        label { display: block; margin-top: 18px; font-weight: bold; }
+        select, input[type="checkbox"] { margin-top: 8px; font-size: 1em; }
+        button { margin-top: 24px; width: 100%; padding: 12px; background: #1E90FF; color: #fff; border: none; border-radius: 4px; font-size: 1.1em; cursor: pointer; }
+        .success { color: #00ffe7; margin-top: 16px; text-align: center; }
+    </style>
+</head>
+<body>
+    <div class="settings-container">
+        <h1>Calendar Settings</h1>
+        <form id="settings-form">
+            <label for="theme">FullCalendar Theme:</label>
+            <select id="theme" name="theme">
+                <optgroup label="Standard Themes">
+                    <option value="standard" {% if settings.theme == 'standard' %}selected{% endif %}>Standard (FullCalendar default)</option>
+                    <option value="spectra6" {% if settings.theme == 'spectra6' %}selected{% endif %}>Spectra 6 (Vivid, for E Ink color)</option>
+                </optgroup>
+                <optgroup label="Bootswatch Themes (require Bootstrap plugin)">
+                    <option value="cerulean" {% if settings.theme == 'cerulean' %}selected{% endif %}>Cerulean</option>
+                    <option value="cosmo" {% if settings.theme == 'cosmo' %}selected{% endif %}>Cosmo</option>
+                    <option value="cyborg" {% if settings.theme == 'cyborg' %}selected{% endif %}>Cyborg</option>
+                    <option value="darkly" {% if settings.theme == 'darkly' %}selected{% endif %}>Darkly</option>
+                    <option value="flatly" {% if settings.theme == 'flatly' %}selected{% endif %}>Flatly</option>
+                    <option value="journal" {% if settings.theme == 'journal' %}selected{% endif %}>Journal</option>
+                    <option value="litera" {% if settings.theme == 'litera' %}selected{% endif %}>Litera</option>
+                    <option value="lumen" {% if settings.theme == 'lumen' %}selected{% endif %}>Lumen</option>
+                    <option value="luxon" {% if settings.theme == 'luxon' %}selected{% endif %}>Luxon</option>
+                    <option value="materia" {% if settings.theme == 'materia' %}selected{% endif %}>Materia</option>
+                    <option value="minty" {% if settings.theme == 'minty' %}selected{% endif %}>Minty</option>
+                    <option value="morph" {% if settings.theme == 'morph' %}selected{% endif %}>Morph</option>
+                    <option value="pulse" {% if settings.theme == 'pulse' %}selected{% endif %}>Pulse</option>
+                    <option value="quartz" {% if settings.theme == 'quartz' %}selected{% endif %}>Quartz</option>
+                    <option value="sandstone" {% if settings.theme == 'sandstone' %}selected{% endif %}>Sandstone</option>
+                    <option value="simplex" {% if settings.theme == 'simplex' %}selected{% endif %}>Simplex</option>
+                    <option value="sketchy" {% if settings.theme == 'sketchy' %}selected{% endif %}>Sketchy</option>
+                    <option value="slate" {% if settings.theme == 'slate' %}selected{% endif %}>Slate</option>
+                    <option value="solar" {% if settings.theme == 'solar' %}selected{% endif %}>Solar</option>
+                    <option value="spacelab" {% if settings.theme == 'spacelab' %}selected{% endif %}>Spacelab</option>
+                    <option value="superhero" {% if settings.theme == 'superhero' %}selected{% endif %}>Superhero</option>
+                    <option value="united" {% if settings.theme == 'united' %}selected{% endif %}>United</option>
+                    <option value="vapor" {% if settings.theme == 'vapor' %}selected{% endif %}>Vapor</option>
+                    <option value="yeti" {% if settings.theme == 'yeti' %}selected{% endif %}>Yeti</option>
+                    <option value="zephyr" {% if settings.theme == 'zephyr' %}selected{% endif %}>Zephyr</option>
+                </optgroup>
+                <optgroup label="Advanced Themes (require plugin)">
+                    <option value="bootstrap5" {% if settings.theme == 'bootstrap5' %}selected{% endif %}>Bootstrap 5</option>
+                    <option value="material" {% if settings.theme == 'material' %}selected{% endif %}>Material</option>
+                    <option value="tailwind" {% if settings.theme == 'tailwind' %}selected{% endif %}>Tailwind</option>
+                    <option value="quasar" {% if settings.theme == 'quasar' %}selected{% endif %}>Quasar</option>
+                    <option value="list" {% if settings.theme == 'list' %}selected{% endif %}>List</option>
+                </optgroup>
+            </select>
+            <div style="font-size:0.9em;color:#888;margin-top:8px;">Advanced and Bootswatch themes require internet access and may load additional CSS/JS dynamically.</div>
+            <label for="show_weekends">
+                <input type="checkbox" id="show_weekends" name="show_weekends" {% if settings.show_weekends %}checked{% endif %}>
+                Show Weekends
+            </label>
+            <label for="hide_past_weeks">
+                <input type="checkbox" id="hide_past_weeks" name="hide_past_weeks" {% if settings.hide_past_weeks %}checked{% endif %}>
+                Hide weeks of the month that have already passed
+            </label>
+            <label for="equal_row_height">
+                <input type="checkbox" id="equal_row_height" name="equal_row_height" {% if settings.equal_row_height %}checked{% endif %}>
+                Force all week rows to have the same height
+            </label>
+            <label for="wrap_event_titles">
+                <input type="checkbox" id="wrap_event_titles" name="wrap_event_titles" {% if settings.wrap_event_titles %}checked{% endif %}>
+                Wrap event title text
+            </label>
+            <label for="color_event_text">
+                <input type="checkbox" id="color_event_text" name="color_event_text" {% if settings.color_event_text %}checked{% endif %}>
+                Color event time and title instead of showing dot
+            </label>
+            <label for="calendar_ids">Calendar IDs (comma-separated):</label>
+            <textarea id="calendar_ids" name="calendar_ids" rows="2" style="width:100%;font-size:1em;">{{ settings.calendar_ids if settings.calendar_ids is defined else '' }}</textarea>
+            <button type="button" id="fetch-calendars" style="margin-top:8px;">Auto-populate from Google</button>
+            <div id="calendar-list" style="font-size:0.95em;color:#aaa;margin-top:6px;"></div>
+
+            <div id="calendar-color-mapping-section" style="margin-top:24px;">
+                <label style="margin-bottom:8px;">Calendar Color Mapping:</label>
+                <div id="calendar-color-mapping"></div>
+                <input type="hidden" id="calendar_colors" name="calendar_colors" value='{{ settings.calendar_colors | tojson | safe if settings.calendar_colors is defined else '{}' }}'>
+            </div>
+            <label for="first_day">First Day of Week:</label>
+            <select id="first_day" name="first_day">
+                <option value="0" {% if settings.first_day == 0 %}selected{% endif %}>Sunday</option>
+                <option value="1" {% if settings.first_day == 1 %}selected{% endif %}>Monday</option>
+            </select>
+            <label for="zoom">Text Zoom (%):</label>
+            <input type="number" id="zoom" name="zoom" min="50" max="300" step="1" value="{{ settings.zoom if settings.zoom is defined else 100 }}">
+            <label for="week_count">Number of Calendar Rows (weeks) to display:</label>
+            <input type="number" id="week_count" name="week_count" min="1" max="6" step="1" value="{{ settings.week_count if settings.week_count is defined else 6 }}">
+            <div style="font-size:0.9em;color:#888;margin-bottom:8px;">The calendar will always show exactly this many week rows, regardless of the month.</div>
+            <button type="submit">Save Settings</button>
+            <div class="success" id="success-message" style="display:none;">Settings saved!</div>
+        </form>
+    </div>
+    <script>
+        document.getElementById('settings-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const data = {
+                theme: document.getElementById('theme').value,
+                show_weekends: document.getElementById('show_weekends').checked,
+                first_day: parseInt(document.getElementById('first_day').value),
+                zoom: parseInt(document.getElementById('zoom').value),
+                hide_past_weeks: document.getElementById('hide_past_weeks').checked,
+                week_count: parseInt(document.getElementById('week_count').value),
+                equal_row_height: document.getElementById('equal_row_height').checked,
+                wrap_event_titles: document.getElementById('wrap_event_titles').checked,
+                color_event_text: document.getElementById('color_event_text').checked,
+                calendar_ids: document.getElementById('calendar_ids').value.trim(),
+                calendar_colors: document.getElementById('calendar_colors').value
+            };
+            fetch('/api/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            })
+            .then(res => res.json())
+            .then(json => {
+                if (json.success) {
+                    document.getElementById('success-message').style.display = 'block';
+                    setTimeout(() => { document.getElementById('success-message').style.display = 'none'; }, 2000);
+                }
+            });
+        });
+
+        document.getElementById('fetch-calendars').onclick = function() {
+            fetch('/api/calendar_list')
+                .then(res => res.json())
+                .then(data => {
+                    if (data.error) {
+                        document.getElementById('calendar-list').innerText = 'Error: ' + data.error;
+                        return;
+                    }
+                    const ids = data.calendars.map(c => c.id).join(', ');
+                    document.getElementById('calendar_ids').value = ids;
+                    document.getElementById('calendar-list').innerHTML =
+                        '<b>Available calendars:</b><ul style="margin:4px 0 0 16px;padding:0;">' +
+                        data.calendars.map(c => `<li><b>${c.summary}</b><br><span style='font-size:0.9em;'>${c.id}</span></li>`).join('') +
+                        '</ul>';
+                });
+        };
+
+        // --- Calendar Color Mapping Logic ---
+        function getThemePalette(theme) {
+            if (theme === 'spectra6') {
+                return [
+                    {name: 'vivid-red', color: '#e60000'},
+                    {name: 'vivid-yellow', color: '#ffd600'},
+                    {name: 'vivid-blue', color: '#0057e7'},
+                    {name: 'vivid-black', color: '#000000'}
+                ];
+            }
+            // Default palette for other themes (can be improved)
+            return [
+                {name: 'blue', color: '#1E90FF'},
+                {name: 'red', color: '#e60000'},
+                {name: 'yellow', color: '#ffd600'},
+                {name: 'green', color: '#28a745'},
+                {name: 'purple', color: '#6f42c1'},
+                {name: 'black', color: '#000000'}
+            ];
+        }
+        function renderCalendarColorMapping() {
+            const theme = document.getElementById('theme').value;
+            const palette = getThemePalette(theme);
+            const ids = document.getElementById('calendar_ids').value.split(',').map(x => x.trim()).filter(Boolean);
+            let mapping = {};
+            try { mapping = JSON.parse(document.getElementById('calendar_colors').value || '{}'); } catch(e) {}
+            const container = document.getElementById('calendar-color-mapping');
+            container.innerHTML = '';
+            ids.forEach(cid => {
+                const row = document.createElement('div');
+                row.style.display = 'block';
+                row.style.marginBottom = '14px';
+                const label = document.createElement('div');
+                label.textContent = cid;
+                label.style.fontSize = '0.98em';
+                label.style.wordBreak = 'break-all';
+                label.style.marginBottom = '6px';
+                row.appendChild(label);
+                const swatchRow = document.createElement('div');
+                swatchRow.style.display = 'flex';
+                swatchRow.style.gap = '12px';
+                palette.forEach(opt => {
+                    const swatch = document.createElement('span');
+                    swatch.title = opt.name;
+                    swatch.style.display = 'inline-block';
+                    swatch.style.width = '22px';
+                    swatch.style.height = '22px';
+                    swatch.style.borderRadius = '50%';
+                    swatch.style.border = '2px solid #fff';
+                    swatch.style.background = opt.color;
+                    swatch.style.cursor = 'pointer';
+                    // Highlight if selected (normalize for both name and color)
+                    let selected = false;
+                    if (theme === 'spectra6') {
+                        selected = mapping[cid] === opt.name;
+                    } else {
+                        selected = mapping[cid] === opt.color || mapping[cid] === opt.name;
+                    }
+                    if (selected) {
+                        swatch.style.outline = '3px solid #1E90FF';
+                    } else {
+                        swatch.style.outline = 'none';
+                    }
+                    swatch.onclick = function() {
+                        mapping[cid] = (theme === 'spectra6') ? opt.name : opt.color;
+                        document.getElementById('calendar_colors').value = JSON.stringify(mapping);
+                        renderCalendarColorMapping();
+                    };
+                    swatchRow.appendChild(swatch);
+                });
+                row.appendChild(swatchRow);
+                container.appendChild(row);
+            });
+            document.getElementById('calendar_colors').value = JSON.stringify(mapping);
+        }
+        document.getElementById('theme').addEventListener('change', renderCalendarColorMapping);
+        document.getElementById('calendar_ids').addEventListener('input', renderCalendarColorMapping);
+        document.addEventListener('DOMContentLoaded', renderCalendarColorMapping);
+        // --- End Calendar Color Mapping Logic ---
+    </script>
+</body>
+</html> 

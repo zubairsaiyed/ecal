@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Responsive FullCalendar</title>
+    
+    <!-- FullCalendar CSS -->
+    <script src='https://cdn.jsdelivr.net/npm/@fullcalendar/core@6.1.18/index.global.min.js'></script>
+    <script src='https://cdn.jsdelivr.net/npm/@fullcalendar/daygrid@6.1.18/index.global.min.js'></script>
+    <script src='https://cdn.jsdelivr.net/npm/@fullcalendar/interaction@6.1.18/index.global.min.js'></script>
+    <script src='https://cdn.jsdelivr.net/npm/@fullcalendar/timegrid@6.1.18/index.global.min.js'></script>
+    <script src='https://cdn.jsdelivr.net/npm/@fullcalendar/list@6.1.18/index.global.min.js'></script>
+    
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            overflow: hidden;
+        }
+        .calendar-container {
+            height: 100vh;
+            width: 100vw;
+        }
+        @media (max-width: 768px) {}
+        @media (max-width: 480px) { body { padding: 0; } }
+    </style>
+</head>
+<body>
+    <div class="calendar-container" id="calendar-zoom-container">
+        <div id="calendar"></div>
+    </div>
+    <div id="event-modal" style="display:none;position:fixed;left:0;top:0;width:100vw;height:100vh;background:rgba(0,0,0,0.35);z-index:1000;align-items:center;justify-content:center;">
+      <div id="event-modal-content" style="background:#fff;color:#000;max-width:90vw;width:350px;padding:24px 18px 18px 18px;border-radius:10px;box-shadow:0 4px 24px #0005;position:relative;">
+        <button id="event-modal-close" style="position:absolute;top:8px;right:12px;font-size:1.3em;background:none;border:none;cursor:pointer;">&times;</button>
+        <h2 id="event-modal-title" style="margin-top:0;font-size:1.3em;"></h2>
+        <div id="event-modal-datetime" style="margin-bottom:8px;font-size:1em;"></div>
+        <div id="event-modal-calendar" style="margin-bottom:8px;font-size:0.98em;color:#444;"></div>
+        <div id="event-modal-location" style="margin-bottom:8px;font-size:0.98em;color:#444;"></div>
+        <div id="event-modal-description" style="margin-bottom:8px;font-size:0.98em;color:#444;"></div>
+      </div>
+    </div>
+    <script>
+        // Injected settings from backend
+        const SETTINGS = {{ settings|tojson }};
+        // Bootswatch theme map
+        const BOOTSWATCH_THEMES = {
+            cerulean: 'https://cdn.jsdelivr.net/npm/bootswatch@5.3.0/dist/cerulean/bootstrap.min.css',
+            cosmo: 'https://cdn.jsdelivr.net/npm/bootswatch@5.3.0/dist/cosmo/bootstrap.min.css',
+            cyborg: 'https://cdn.jsdelivr.net/npm/bootswatch@5.3.0/dist/cyborg/bootstrap.min.css',
+            darkly: 'https://cdn.jsdelivr.net/npm/bootswatch@5.3.0/dist/darkly/bootstrap.min.css',
+            flatly: 'https://cdn.jsdelivr.net/npm/bootswatch@5.3.0/dist/flatly/bootstrap.min.css',
+            journal: 'https://cdn.jsdelivr.net/npm/bootswatch@5.3.0/dist/journal/bootstrap.min.css',
+            litera: 'https://cdn.jsdelivr.net/npm/bootswatch@5.3.0/dist/litera/bootstrap.min.css',
+            lumen: 'https://cdn.jsdelivr.net/npm/bootswatch@5.3.0/dist/lumen/bootstrap.min.css',
+            luxon: 'https://cdn.jsdelivr.net/npm/bootswatch@5.3.0/dist/luxon/bootstrap.min.css',
+            materia: 'https://cdn.jsdelivr.net/npm/bootswatch@5.3.0/dist/materia/bootstrap.min.css',
+            minty: 'https://cdn.jsdelivr.net/npm/bootswatch@5.3.0/dist/minty/bootstrap.min.css',
+            morph: 'https://cdn.jsdelivr.net/npm/bootswatch@5.3.0/dist/morph/bootstrap.min.css',
+            pulse: 'https://cdn.jsdelivr.net/npm/bootswatch@5.3.0/dist/pulse/bootstrap.min.css',
+            quartz: 'https://cdn.jsdelivr.net/npm/bootswatch@5.3.0/dist/quartz/bootstrap.min.css',
+            sandstone: 'https://cdn.jsdelivr.net/npm/bootswatch@5.3.0/dist/sandstone/bootstrap.min.css',
+            simplex: 'https://cdn.jsdelivr.net/npm/bootswatch@5.3.0/dist/simplex/bootstrap.min.css',
+            sketchy: 'https://cdn.jsdelivr.net/npm/bootswatch@5.3.0/dist/sketchy/bootstrap.min.css',
+            slate: 'https://cdn.jsdelivr.net/npm/bootswatch@5.3.0/dist/slate/bootstrap.min.css',
+            solar: 'https://cdn.jsdelivr.net/npm/bootswatch@5.3.0/dist/solar/bootstrap.min.css',
+            spacelab: 'https://cdn.jsdelivr.net/npm/bootswatch@5.3.0/dist/spacelab/bootstrap.min.css',
+            superhero: 'https://cdn.jsdelivr.net/npm/bootswatch@5.3.0/dist/superhero/bootstrap.min.css',
+            united: 'https://cdn.jsdelivr.net/npm/bootswatch@5.3.0/dist/united/bootstrap.min.css',
+            vapor: 'https://cdn.jsdelivr.net/npm/bootswatch@5.3.0/dist/vapor/bootstrap.min.css',
+            yeti: 'https://cdn.jsdelivr.net/npm/bootswatch@5.3.0/dist/yeti/bootstrap.min.css',
+            zephyr: 'https://cdn.jsdelivr.net/npm/bootswatch@5.3.0/dist/zephyr/bootstrap.min.css',
+        };
+        // Advanced theme plugin/CDN map
+        const ADVANCED_THEMES = {
+            material: {
+                css: 'https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap',
+                plugin: 'https://cdn.jsdelivr.net/npm/@fullcalendar/material@6.1.8/index.global.min.js',
+                themeSystem: 'material',
+            },
+            tailwind: {
+                css: 'https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css',
+                plugin: 'https://cdn.jsdelivr.net/npm/@fullcalendar/tailwind@6.1.8/index.global.min.js',
+                themeSystem: 'tailwind',
+            },
+            quasar: {
+                css: 'https://cdn.jsdelivr.net/npm/quasar@2.12.4/dist/quasar.prod.css',
+                plugin: 'https://cdn.jsdelivr.net/npm/@fullcalendar/quasar@6.1.8/index.global.min.js',
+                themeSystem: 'quasar',
+            },
+        };
+        function loadThemeAssets(theme) {
+            // Remove any existing theme CSS/JS
+            document.querySelectorAll('link[data-bootswatch], link[data-bootstrap], link[data-advtheme], script[data-fc-bootstrap], script[data-fc-advtheme]').forEach(e => e.remove());
+            // Bootswatch/Bootstrap
+            if (theme === 'bootstrap5' || BOOTSWATCH_THEMES[theme]) {
+                let css = document.createElement('link');
+                css.rel = 'stylesheet';
+                css.setAttribute('data-bootstrap', '');
+                if (BOOTSWATCH_THEMES[theme]) {
+                    css.href = BOOTSWATCH_THEMES[theme];
+                    css.setAttribute('data-bootswatch', theme);
+                } else {
+                    css.href = 'https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css';
+                }
+                document.head.appendChild(css);
+                let script = document.createElement('script');
+                script.src = 'https://cdn.jsdelivr.net/npm/@fullcalendar/bootstrap5@6.1.8/index.global.min.js';
+                script.setAttribute('data-fc-bootstrap', '');
+                document.head.appendChild(script);
+            }
+            // Advanced themes
+            if (ADVANCED_THEMES[theme]) {
+                let css = document.createElement('link');
+                css.rel = 'stylesheet';
+                css.href = ADVANCED_THEMES[theme].css;
+                css.setAttribute('data-advtheme', theme);
+                document.head.appendChild(css);
+                let script = document.createElement('script');
+                script.src = ADVANCED_THEMES[theme].plugin;
+                script.setAttribute('data-fc-advtheme', theme);
+                document.head.appendChild(script);
+            }
+        }
+        function filterPastWeeks() {
+            if (!SETTINGS.hide_past_weeks) return;
+            const today = new Date();
+            const calendarEl = document.getElementById('calendar');
+            if (!calendarEl) return;
+            const weekRows = Array.from(calendarEl.querySelectorAll('.fc-daygrid-body tr'));
+            weekRows.forEach(row => {
+                let hide = false;
+                const days = Array.from(row.querySelectorAll('.fc-daygrid-day'));
+                const currentMonthDays = days.filter(cell => {
+                    const dateStr = cell.getAttribute('data-date');
+                    if (!dateStr) return false;
+                    const cellDate = new Date(dateStr);
+                    return cellDate.getMonth() === today.getMonth();
+                });
+                if (
+                    currentMonthDays.length &&
+                    currentMonthDays.every(cell => {
+                        const dateStr = cell.getAttribute('data-date');
+                        const cellDate = new Date(dateStr);
+                        return cellDate < new Date(today.getFullYear(), today.getMonth(), today.getDate());
+                    })
+                ) {
+                    hide = true;
+                }
+                row.style.display = hide ? 'none' : '';
+                row.dataset.pastHidden = hide ? 'true' : 'false';
+            });
+        }
+        // Show only the first N visible week rows after hiding past weeks
+        function enforceWeekCount() {
+            const weekCount = SETTINGS.week_count || 6;
+            const calendarEl = document.getElementById('calendar');
+            if (!calendarEl) return;
+            const weekRows = Array.from(calendarEl.querySelectorAll('.fc-daygrid-body tr'));
+            // Only consider rows not hidden by past filter
+            let visibleRows = weekRows.filter(row => row.style.display !== 'none');
+            visibleRows.forEach((row, idx) => {
+                if (idx < weekCount) {
+                    row.style.display = '';
+                    row.dataset.customHidden = 'false';
+                } else {
+                    row.style.display = 'none';
+                    row.dataset.customHidden = 'true';
+                }
+            });
+        }
+        function applyEqualRowHeight() {
+            if (!SETTINGS.equal_row_height) return;
+            const calendarEl = document.getElementById('calendar');
+            if (!calendarEl) return;
+            const weekRows = Array.from(calendarEl.querySelectorAll('.fc-daygrid-body tr'));
+            // Find the max row height
+            let maxHeight = 0;
+            weekRows.forEach(row => {
+                row.style.height = '';
+                if (row.style.display !== 'none') {
+                    const h = row.offsetHeight;
+                    if (h > maxHeight) maxHeight = h;
+                }
+            });
+            // Set all visible rows to max height
+            weekRows.forEach(row => {
+                if (row.style.display !== 'none') {
+                    row.style.height = maxHeight + 'px';
+                } else {
+                    row.style.height = '';
+                }
+            });
+        }
+        // Apply event title wrapping if enabled, but do not change event box layout or alignment when disabled
+        function applyEventTitleWrap() {
+            const wrap = SETTINGS.wrap_event_titles;
+            let styleId = 'fc-title-wrap-style';
+            let styleTag = document.getElementById(styleId);
+            if (styleTag) styleTag.remove();
+            if (wrap) {
+                styleTag = document.createElement('style');
+                styleTag.id = styleId;
+                styleTag.innerHTML = `.fc-event-title, .fc .fc-event-title { white-space: normal !important; word-break: break-word !important; vertical-align: top !important; }
+.fc-event-time, .fc .fc-event-time { vertical-align: top !important; }`;
+                document.head.appendChild(styleTag);
+            }
+        }
+        // Improved: Always force top alignment for event time and title, targeting .fc-event-main-frame
+        function applyEventTopAlignment() {
+            let styleId = 'fc-event-top-align-style';
+            let styleTag = document.getElementById(styleId);
+            if (styleTag) styleTag.remove();
+            styleTag = document.createElement('style');
+            styleTag.id = styleId;
+            styleTag.innerHTML = `
+                .fc-event-time, .fc .fc-event-time,
+                .fc-event-title, .fc .fc-event-title {
+                    vertical-align: top !important;
+                    display: inline-block !important;
+                }
+            `;
+            document.head.appendChild(styleTag);
+        }
+        // Always inject style to top-align time and title
+        (function() {
+            let styleId = 'fc-event-time-title-align-style';
+            let styleTag = document.getElementById(styleId);
+            if (styleTag) styleTag.remove();
+            styleTag = document.createElement('style');
+            styleTag.id = styleId;
+            styleTag.innerHTML = `
+                .fc-event-time, .fc .fc-event-time,
+                .fc-event-title, .fc .fc-event-title {
+                    vertical-align: top !important;
+                    display: inline-block !important;
+                }
+            `;
+            document.head.appendChild(styleTag);
+        })();
+        // Improved: Dot is vertically centered with first line of time, time/title are top-aligned
+        (function() {
+            let styleId = 'fc-event-dot-time-title-align-style';
+            let styleTag = document.getElementById(styleId);
+            if (styleTag) styleTag.remove();
+            styleTag = document.createElement('style');
+            styleTag.id = styleId;
+            styleTag.innerHTML = `
+                a.fc-event.fc-daygrid-dot-event {
+                    display: flex !important;
+                    align-items: flex-start !important;
+                    flex-direction: row !important;
+                }
+                .fc-daygrid-event-dot {
+                    align-self: center !important;
+                    margin-top: 0 !important;
+                }
+                .fc-event-time,
+                .fc-event-title {
+                    align-self: flex-start !important;
+                }
+            `;
+            document.head.appendChild(styleTag);
+        })();
+        // Add custom theme logic for 'spectra6'
+        function applySpectra6Theme() {
+            // Remove any previous spectra6 style
+            let styleId = 'fc-spectra6-theme';
+            let styleTag = document.getElementById(styleId);
+            if (styleTag) styleTag.remove();
+            if (SETTINGS.theme !== 'spectra6') return;
+            styleTag = document.createElement('style');
+            styleTag.id = styleId;
+            styleTag.innerHTML = `
+                body, .fc, .fc-daygrid-day, .fc-daygrid, .fc-scrollgrid, .fc-theme-standard {
+                    background: #fff !important;
+                    color: #000 !important;
+                }
+                .fc-event, .fc .fc-event, .fc-daygrid-event-dot {
+                    color: #000 !important;
+                    font-weight: normal !important;
+                }
+                .fc-event-time, .fc .fc-event-time {
+                    font-weight: normal !important;
+                }
+                .fc-event-title, .fc .fc-event-title {
+                    font-weight: bold !important;
+                }
+                .fc-event, .fc .fc-event {
+                    background-color: #fff !important;
+                    border: 2px solid #000 !important;
+                }
+                /* Vivid event colors for up to 4 categories */
+                .fc-event.vivid-red, .fc-daygrid-event-dot.vivid-red { background-color: #e60000 !important; border-color: #e60000 !important; }
+                .fc-event.vivid-yellow, .fc-daygrid-event-dot.vivid-yellow { background-color: #ffd600 !important; border-color: #ffd600 !important; }
+                .fc-event.vivid-blue, .fc-daygrid-event-dot.vivid-blue { background-color: #0057e7 !important; border-color: #0057e7 !important; }
+                .fc-event.vivid-black, .fc-daygrid-event-dot.vivid-black { background-color: #000 !important; border-color: #000 !important; color: #fff !important; }
+                /* For timed events, remove colored background and color text instead */
+                .fc-event.spectra-timed.vivid-red, .fc-event.spectra-timed.vivid-yellow, .fc-event.spectra-timed.vivid-blue, .fc-event.spectra-timed.vivid-black {
+                    background-color: #fff !important;
+                    border: none !important;
+                }
+                .fc-event.spectra-timed.vivid-red .fc-event-time, .fc-event.spectra-timed.vivid-red .fc-event-title { color: #e60000 !important; }
+                .fc-event.spectra-timed.vivid-yellow .fc-event-time, .fc-event.spectra-timed.vivid-yellow .fc-event-title { color: #ffd600 !important; }
+                .fc-event.spectra-timed.vivid-blue .fc-event-time, .fc-event.spectra-timed.vivid-blue .fc-event-title { color: #0057e7 !important; }
+                .fc-event.spectra-timed.vivid-black .fc-event-time, .fc-event.spectra-timed.vivid-black .fc-event-title { color: #000 !important; }
+                /* Spectra 6 theme grid and current day highlight */
+                .fc-theme-standard .fc-scrollgrid, .fc-theme-standard .fc-scrollgrid-section, .fc-theme-standard .fc-scrollgrid-sync-table, .fc-theme-standard td, .fc-theme-standard th {
+                    border-color: #000 !important;
+                    border-width: 1.2px !important;
+                }
+                .fc-theme-standard .fc-daygrid-day.fc-day-today {
+                    background: #fff9cc !important;
+                    border: 1.2px solid #000 !important;
+                }
+            `;
+            document.head.appendChild(styleTag);
+        }
+        function renderCalendar(theme) {
+            let container = document.getElementById('calendar');
+            if (!container) {
+                console.error('No #calendar element found in DOM!');
+                return;
+            }
+            container.innerHTML = '';
+            loadThemeAssets(theme);
+            setTimeout(function() {
+                var calendar = new FullCalendar.Calendar(container, {
+                    initialView: 'dayGridMonth',
+                    headerToolbar: false,
+                    height: '100%',
+                    aspectRatio: 'auto',
+                    expandRows: true,
+                    dayMaxEvents: false,
+                    weekends: SETTINGS.show_weekends !== undefined ? SETTINGS.show_weekends : true,
+                    firstDay: SETTINGS.first_day !== undefined ? SETTINGS.first_day : 1,
+                    locale: 'en',
+                    fixedWeekCount: true, // Always render 6 rows, we'll hide extra ones
+                    themeSystem: (theme === 'bootstrap5' || BOOTSWATCH_THEMES[theme]) ? 'bootstrap5' : (ADVANCED_THEMES[theme] ? ADVANCED_THEMES[theme].themeSystem : (theme || 'standard')),
+                    buttonText: {
+                        today: 'Today',
+                        month: 'Month',
+                        week: 'Week',
+                        day: 'Day',
+                        list: 'List'
+                    },
+                    events: function(info, successCallback, failureCallback) {
+                        fetch('/api/events')
+                            .then(response => response.json())
+                            .then(data => {
+                                if (data.error) {
+                                    console.error('Error loading events:', data.error);
+                                    failureCallback(data.error);
+                                } else {
+                                    console.log('Loaded', data.length, 'events from Google Calendar');
+                                    successCallback(data);
+                                }
+                            })
+                            .catch(error => {
+                                console.error('Error fetching events:', error);
+                                failureCallback(error);
+                            });
+                    },
+                    eventClick: function(info) {
+                        // Fill modal with event details
+                        const event = info.event;
+                        document.getElementById('event-modal-title').textContent = event.title || '';
+                        let startStr = event.start ? event.start.toLocaleString() : '';
+                        let endStr = event.end ? event.end.toLocaleString() : '';
+                        let datetimeStr = 'Start: ' + startStr;
+                        if (endStr && endStr !== startStr) datetimeStr += '<br>End: ' + endStr;
+                        document.getElementById('event-modal-datetime').innerHTML = datetimeStr;
+                        // Show calendar ID or name
+                        let cal = event.extendedProps && event.extendedProps.calendarId ? event.extendedProps.calendarId : (event._def && event._def.extendedProps && event._def.extendedProps.calendarId ? event._def.extendedProps.calendarId : (event.calendarId || ''));
+                        document.getElementById('event-modal-calendar').textContent = cal ? 'Calendar: ' + cal : '';
+                        // Show location/description if available
+                        document.getElementById('event-modal-location').textContent = event.extendedProps && event.extendedProps.location ? 'Location: ' + event.extendedProps.location : '';
+                        document.getElementById('event-modal-description').textContent = event.extendedProps && event.extendedProps.description ? 'Description: ' + event.extendedProps.description : '';
+                        document.getElementById('event-modal').style.display = 'flex';
+                        info.jsEvent.preventDefault();
+                    },
+                    dateClick: function(info) {
+                        var eventTitle = prompt('Enter event title:');
+                        if (eventTitle) {
+                            var ceruleanColors = ['#1E90FF', '#4682B4', '#87CEEB', '#5F9EA0', '#B0E0E6', '#6495ED', '#4169E1', '#00BFFF'];
+                            var randomColor = ceruleanColors[Math.floor(Math.random() * ceruleanColors.length)];
+                            calendar.addEvent({
+                                title: eventTitle,
+                                start: info.dateStr,
+                                backgroundColor: randomColor,
+                                borderColor: randomColor
+                            });
+                        }
+                    },
+                    eventDrop: function(info) {
+                        alert('Event moved to: ' + info.event.start.toLocaleDateString());
+                    },
+                    eventResize: function(info) {
+                        alert('Event resized to: ' + info.event.end.toLocaleDateString());
+                    },
+                    eventDidMount: function(info) {
+                        // Assign vivid color classes for spectra6 theme
+                        if (SETTINGS.theme === 'spectra6') {
+                            const colorMap = {
+                                '#e60000': 'vivid-red',
+                                '#ffd600': 'vivid-yellow',
+                                '#0057e7': 'vivid-blue',
+                                '#000000': 'vivid-black'
+                            };
+                            let color = (info.event.backgroundColor || '').toLowerCase();
+                            let vividClass = colorMap[color];
+                            if (vividClass) {
+                                info.el.classList.add(vividClass);
+                                let dot = info.el.querySelector('.fc-daygrid-event-dot');
+                                if (dot) dot.classList.add(vividClass);
+                            }
+                            // For timed events, remove colored background and color text instead
+                            const isAllDay = info.event.allDay;
+                            if (!isAllDay && vividClass) {
+                                info.el.classList.add('spectra-timed');
+                            } else {
+                                info.el.classList.remove('spectra-timed');
+                            }
+                            // Remove colored background for timed events (handled by CSS)
+                            // No need to set textColor here, CSS will handle it
+                        } else if (SETTINGS.color_event_text) {
+                            // Only apply color_event_text for non-spectra6 themes
+                            const dot = info.el.querySelector('.fc-daygrid-event-dot');
+                            const time = info.el.querySelector('.fc-event-time');
+                            const title = info.el.querySelector('.fc-event-title');
+                            if (dot && (time || title)) {
+                                const dotColor = window.getComputedStyle(dot).borderColor;
+                                dot.style.display = 'none';
+                                if (time) time.style.color = dotColor;
+                                if (title) title.style.color = dotColor;
+                            }
+                        }
+                    },
+                    loading: function(isLoading) {
+                        if (isLoading) {
+                            console.log('Calendar is loading...');
+                        } else {
+                            console.log('Calendar loaded successfully');
+                            filterPastWeeks();
+                            enforceWeekCount();
+                            applyEqualRowHeight();
+                            applyEventTitleWrap();
+                            applyEventTopAlignment();
+                            applySpectra6Theme();
+                        }
+                    }
+                });
+                calendar.render();
+            }, (theme === 'bootstrap5' || BOOTSWATCH_THEMES[theme] || ADVANCED_THEMES[theme]) ? 200 : 0);
+        }
+        function applyZoom(zoom) {
+            var container = document.getElementById('calendar-zoom-container');
+            if (!container) return;
+            var pct = (typeof zoom === 'number' && !isNaN(zoom)) ? zoom : 100;
+            container.style.fontSize = pct + '%';
+        }
+        // Initial render
+        document.addEventListener('DOMContentLoaded', function() {
+            applyZoom(SETTINGS.zoom);
+            renderCalendar(SETTINGS.theme);
+            // Modal close logic
+            document.getElementById('event-modal-close').onclick = function() {
+                document.getElementById('event-modal').style.display = 'none';
+            };
+            document.getElementById('event-modal').onclick = function(e) {
+                if (e.target === this) this.style.display = 'none';
+            };
+        });
+    </script>
+</body>
+</html> 
