@@ -15,18 +15,21 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
-# Get the current directory
+# Get the project root directory (parent of scripts directory)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-echo "Installing from: $SCRIPT_DIR"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+echo "Script directory: $SCRIPT_DIR"
+echo "Project directory: $PROJECT_DIR"
 
 # Get the current user
 CURRENT_USER=$(whoami)
 echo "Current user: $CURRENT_USER"
 
 # Check if virtual environment exists
-if [ ! -d "$SCRIPT_DIR/venv" ]; then
-    echo "Warning: Virtual environment not found at $SCRIPT_DIR/venv"
+if [ ! -d "$PROJECT_DIR/venv" ]; then
+    echo "Warning: Virtual environment not found at $PROJECT_DIR/venv"
     echo "Please create it first with:"
+    echo "  cd $PROJECT_DIR"
     echo "  python3 -m venv venv"
     echo "  source venv/bin/activate"
     echo "  pip install -r requirements.txt"
@@ -53,9 +56,9 @@ Wants=network.target
 [Service]
 Type=simple
 User=$CURRENT_USER
-WorkingDirectory=$SCRIPT_DIR
-Environment=PATH=$SCRIPT_DIR/venv/bin
-ExecStart=$SCRIPT_DIR/venv/bin/python3 $SCRIPT_DIR/image_receiver_server.py
+WorkingDirectory=$PROJECT_DIR
+Environment=PATH=$PROJECT_DIR/venv/bin
+ExecStart=$PROJECT_DIR/venv/bin/python3 $PROJECT_DIR/image_receiver_server.py
 Restart=always
 RestartSec=10
 StandardOutput=append:/var/log/ecal/image-server.log
