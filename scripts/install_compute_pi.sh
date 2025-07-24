@@ -56,8 +56,7 @@ Type=simple
 User=pi
 WorkingDirectory=$SCRIPT_DIR
 Environment=PATH=$SCRIPT_DIR/venv/bin
-Environment=DEV_MODE=0
-ExecStart=$SCRIPT_DIR/venv/bin/python3 $SCRIPT_DIR/calendar_sync_service.py
+ExecStart=$SCRIPT_DIR/venv/bin/python3 $SCRIPT_DIR/calendar_sync_service.py --scheduled
 Restart=always
 RestartSec=30
 

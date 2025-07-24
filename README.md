@@ -204,16 +204,37 @@ python3 calendar_sync_service.py
 ```
 
 **Configuration:**
-- **DEV_MODE**: Set environment variable `DEV_MODE=1` for development mode (10-second polling)
-- **SLEEP_HOURS**: Default 12 hours between updates in production mode
-- **CALENDAR_URL**: Points to the calendar web application (default: http://localhost:5000)
-- **ENDPOINT_URL**: Upload endpoint for screenshots (default: http://raspberrypi.local:8000/upload)
+- **Default Mode**: Dev mode with 10-second polling (change detection)
+- **Scheduled Mode**: Use `--scheduled` flag for production mode with configurable intervals
+- **Polling Interval**: `--poll-interval` for dev mode (default: 10 seconds)
+- **Sleep Hours**: `--sleep-hours` for scheduled mode (default: 12 hours)
+- **Calendar URL**: `--calendar-url` to specify calendar web app URL
+- **Endpoint URL**: `--endpoint-url` to specify upload endpoint
+- **Screenshot Path**: `--screenshot-path` to specify screenshot file location
+
+**Usage Examples:**
+```bash
+# Dev mode (default) - 10-second polling with change detection
+python3 calendar_sync_service.py
+
+# Dev mode with custom polling interval
+python3 calendar_sync_service.py --poll-interval 30
+
+# Scheduled mode - 12-hour intervals
+python3 calendar_sync_service.py --scheduled
+
+# Scheduled mode with custom interval
+python3 calendar_sync_service.py --scheduled --sleep-hours 6
+
+# Custom configuration
+python3 calendar_sync_service.py --calendar-url http://192.168.1.100:5000 --endpoint-url http://192.168.1.101:8000/upload
+```
 
 **Features:**
 - Automatic screenshot capture of calendar web interface
-- Change detection with hash comparison
-- Configurable update intervals
-- Development mode for testing
+- Change detection with hash comparison (dev mode)
+- Configurable update intervals for both modes
+- Command-line configuration for all settings
 - Error handling and logging
 
 ## Configuration
@@ -315,7 +336,7 @@ python3 calendar_server.py
 - Test image upload: `curl -X POST -F "file=@test.png" http://localhost:8000/upload`
 - Test e-paper display: `python3 display_image.py test.png`
 - Test calendar app: Visit `http://localhost:5000` after starting `calendar_server.py`
-- Test calendar sync: `DEV_MODE=1 python3 calendar_sync_service.py` (development mode)
+- Test calendar sync: `python3 calendar_sync_service.py` (dev mode) or `python3 calendar_sync_service.py --scheduled` (scheduled mode)
 
 ## Troubleshooting
 

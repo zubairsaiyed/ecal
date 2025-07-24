@@ -6,6 +6,7 @@ from datetime import datetime
 import hashlib
 import requests
 import sys
+import argparse
 
 # Configuration
 CALENDAR_URL = "http://localhost:5000"
@@ -13,9 +14,6 @@ SCREENSHOT_PATH = "cal.png"  # You can change this path/filename
 WINDOW_SIZE = "1600,1200"
 IMAGE_SCRIPT = "display_image.py"    # Path to your display_image.py script
 SLEEP_HOURS = 12
-
-DEV_MODE = os.environ.get('DEV_MODE', '0') == '1' or '--dev' in sys.argv
-POLL_INTERVAL = 10  # seconds for dev mode
 
 # ENDPOINT_URL is a placeholder; replace with your actual endpoint
 ENDPOINT_URL = "http://raspberrypi.local:8000/upload"
@@ -76,25 +74,51 @@ def get_image_hash():
         return None
 
 def main():
-    if DEV_MODE:
-        print("[DEV MODE] Watching for calendar changes...")
+    parser = argparse.ArgumentParser(description='Calendar Sync Service - Monitors calendar changes and uploads screenshots')
+    parser.add_argument('--scheduled', action='store_true', 
+                       help='Run in scheduled mode (default: dev mode with 10-second polling)')
+    parser.add_argument('--poll-interval', type=int, default=10,
+                       help='Polling interval in seconds for dev mode (default: 10)')
+    parser.add_argument('--sleep-hours', type=int, default=12,
+                       help='Sleep interval in hours for scheduled mode (default: 12)')
+    parser.add_argument('--calendar-url', type=str, default=CALENDAR_URL,
+                       help=f'Calendar URL to monitor (default: {CALENDAR_URL})')
+    parser.add_argument('--endpoint-url', type=str, default=ENDPOINT_URL,
+                       help=f'Upload endpoint URL (default: {ENDPOINT_URL})')
+    parser.add_argument('--screenshot-path', type=str, default=SCREENSHOT_PATH,
+                       help=f'Screenshot file path (default: {SCREENSHOT_PATH})')
+    
+    args = parser.parse_args()
+    
+    # Update configuration based on arguments
+    global CALENDAR_URL, ENDPOINT_URL, SCREENSHOT_PATH, SLEEP_HOURS
+    CALENDAR_URL = args.calendar_url
+    ENDPOINT_URL = args.endpoint_url
+    SCREENSHOT_PATH = args.screenshot_path
+    SLEEP_HOURS = args.sleep_hours
+    
+    if args.scheduled:
+        print(f"[SCHEDULED MODE] Running with {SLEEP_HOURS}-hour intervals...")
+        while True:
+            take_screenshot()
+            refresh_display()
+            print(f"[{datetime.now()}] Sleeping for {SLEEP_HOURS} hours...")
+            time.sleep(SLEEP_HOURS * 3600)
+    else:
+        # Default: DEV MODE
+        poll_interval = args.poll_interval
+        print(f"[DEV MODE] Watching for calendar changes with {poll_interval}-second polling...")
         take_screenshot()
         refresh_display()
         last_hash = get_image_hash()
         while True:
-            time.sleep(POLL_INTERVAL)
+            time.sleep(poll_interval)
             take_screenshot()
             new_hash = get_image_hash()
             if new_hash and new_hash != last_hash:
                 print(f"[DEV MODE] Change detected at {datetime.now()}! Refreshing...")
                 refresh_display()
                 last_hash = new_hash
-    else:
-        while True:
-            take_screenshot()
-            refresh_display()
-            print(f"[{datetime.now()}] Sleeping for {SLEEP_HOURS} hours...")
-            time.sleep(SLEEP_HOURS * 3600)
 
 if __name__ == "__main__":
     main() 

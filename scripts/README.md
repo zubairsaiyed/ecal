@@ -27,7 +27,7 @@ sudo ./scripts/install_display_pi.sh
 - Enables automatic startup on boot
 - Configures proper service dependencies (sync service waits for calendar server)
 - Sets up the calendar server on port 5000
-- Configures the sync service to upload to Display Pi on port 8000
+- Configures the sync service to run in scheduled mode (12-hour intervals) and upload to Display Pi on port 8000
 
 **Usage**:
 ```bash
