@@ -4,7 +4,7 @@ A Python-based system for displaying images and calendars on e-paper displays, w
 
 ## Applications
 
-This project contains three main applications:
+This project contains four main applications:
 
 ### 1. Image Receiver Server (`image_receiver_server.py`)
 A Flask web server that receives uploaded images and processes them for display on e-paper.
@@ -14,6 +14,9 @@ A standalone script for displaying images on a 13.3-inch e-paper display with au
 
 ### 3. Calendar Web Application (`calendar_server.py`)
 A Flask web application for displaying Google Calendar events with customizable themes and settings.
+
+### 4. Calendar Sync Service (`calendar_sync_service.py`)
+A background service that monitors calendar changes, takes screenshots of the calendar web interface, and uploads them to an endpoint for display on e-paper.
 
 ## Features
 
@@ -129,6 +132,28 @@ python3 calendar_server.py
 - Web-based settings management
 - Automatic settings file creation
 
+### Calendar Sync Service
+
+The background service that automatically syncs calendar changes to the e-paper display.
+
+**Start the sync service:**
+```bash
+python3 calendar_sync_service.py
+```
+
+**Configuration:**
+- **DEV_MODE**: Set environment variable `DEV_MODE=1` for development mode (10-second polling)
+- **SLEEP_HOURS**: Default 12 hours between updates in production mode
+- **CALENDAR_URL**: Points to the calendar web application (default: http://localhost:5000)
+- **ENDPOINT_URL**: Upload endpoint for screenshots (default: http://raspberrypi.local:8000/upload)
+
+**Features:**
+- Automatic screenshot capture of calendar web interface
+- Change detection with hash comparison
+- Configurable update intervals
+- Development mode for testing
+- Error handling and logging
+
 ## Configuration
 
 ### Image Processing
@@ -193,6 +218,7 @@ The e-paper display configuration is handled by the libraries in `/lib`:
 ```
 ecal/
 ├── calendar_server.py         # Calendar web application
+├── calendar_sync_service.py  # Calendar sync and screenshot service
 ├── display_image.py           # E-paper image display script
 ├── image_receiver_server.py   # Flask web server
 ├── requirements.txt           # Python dependencies
@@ -224,6 +250,7 @@ python3 calendar_server.py
 - Test image upload: `curl -X POST -F "file=@test.png" http://localhost:8000/upload`
 - Test e-paper display: `python3 display_image.py test.png`
 - Test calendar app: Visit `http://localhost:5000` after starting `calendar_server.py`
+- Test calendar sync: `DEV_MODE=1 python3 calendar_sync_service.py` (development mode)
 
 ## Troubleshooting
 
