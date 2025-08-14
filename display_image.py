@@ -48,6 +48,50 @@ def display_image(image_path, zoom_to_fit=False):
         print(f"Image size: {Himage.size}")
         print(f"Image info: {Himage.info}")
         
+        # Handle EXIF orientation data (backup handler)
+        # Note: The server should have already rotated the image, but this ensures
+        # the display script also honors EXIF data as a fallback
+        try:
+            from PIL import ExifTags
+            exif = Himage.getexif()
+            if exif is not None:
+                print(f"EXIF data found: {exif is not None}")
+                print(f"EXIF tags: {list(exif.keys())}")
+                
+                # Find orientation tag
+                orientation = None
+                for tag, value in ExifTags.TAGS.items():
+                    if value == 'Orientation':
+                        orientation = tag
+                        break
+                
+                if orientation is not None and orientation in exif:
+                    orientation_value = exif.get(orientation, None)
+                    print(f"EXIF orientation value: {orientation_value}")
+                    
+                    # Apply EXIF rotation
+                    if orientation_value == 3:
+                        Himage = Himage.rotate(180, expand=True)
+                        print("Applied EXIF rotation: 180°")
+                    elif orientation_value == 6:
+                        Himage = Himage.rotate(90, expand=True)
+                        print("Applied EXIF rotation: 90°")
+                    elif orientation_value == 8:
+                        Himage = Himage.rotate(270, expand=True)
+                        print("Applied EXIF rotation: 270°")
+                    else:
+                        print(f"No rotation needed for orientation {orientation_value}")
+                    
+                    print(f"Image size after EXIF rotation: {Himage.size}")
+                else:
+                    print("No EXIF orientation data found")
+            else:
+                print("No EXIF data found")
+        except Exception as e:
+            print(f"Error processing EXIF data: {e}")
+            import traceback
+            traceback.print_exc()
+        
         # Resize image to fit the display if necessary
         if Himage.size != (epd13in3E.EPD_WIDTH, epd13in3E.EPD_HEIGHT):
             print(f"Original image size: {Himage.size}")
