@@ -62,13 +62,8 @@ def upload_image():
             print(f"[{datetime.now()}] Auto-rotation disabled, keeping original orientation")
         
         # Call the display_image.py script
-        # Pass the disable_rotation parameter
-        cmd = [sys.executable, IMAGE_SCRIPT, tmp_path]
-        if not auto_rotate:
-            cmd.append('--disable-rotation')
-        
-        print(f"[{datetime.now()}] Running display command: {' '.join(cmd)}")
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        print(f"[{datetime.now()}] Running display command: {' '.join([sys.executable, IMAGE_SCRIPT, tmp_path])}")
+        result = subprocess.run([sys.executable, IMAGE_SCRIPT, tmp_path], capture_output=True, text=True)
         if result.returncode != 0:
             print(f"display_image.py failed: {result.stderr}")
             os.remove(tmp_path)
