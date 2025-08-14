@@ -34,28 +34,42 @@ def upload_image():
         if auto_rotate:
             try:
                 img = Image.open(tmp_path)
+                print(f"[{datetime.now()}] Original image size: {img.size}")
                 try:
                     exif = img.getexif()
+                    print(f"[{datetime.now()}] EXIF data found: {exif is not None}")
+                    if exif is not None:
+                        print(f"[{datetime.now()}] EXIF tags: {list(exif.keys())}")
+                    
                     orientation = None
                     for tag, value in ExifTags.TAGS.items():
                         if value == 'Orientation':
                             orientation = tag
                             break
+                    print(f"[{datetime.now()}] Orientation tag ID: {orientation}")
+                    
                     if exif is not None and orientation is not None:
                         orientation_value = exif.get(orientation, None)
+                        print(f"[{datetime.now()}] EXIF orientation value: {orientation_value}")
                         if orientation_value == 3:
                             img = img.rotate(180, expand=True)
                             print(f"[{datetime.now()}] Rotated image 180°")
                         elif orientation_value == 6:
-                            img = img.rotate(270, expand=True)
-                            print(f"[{datetime.now()}] Rotated image 270°")
-                        elif orientation_value == 8:
                             img = img.rotate(90, expand=True)
                             print(f"[{datetime.now()}] Rotated image 90°")
+                        elif orientation_value == 8:
+                            img = img.rotate(270, expand=True)
+                            print(f"[{datetime.now()}] Rotated image 270°")
+                        else:
+                            print(f"[{datetime.now()}] No rotation needed for orientation {orientation_value}")
+                        
+                        print(f"[{datetime.now()}] Image size after rotation: {img.size}")
+                    else:
+                        print(f"[{datetime.now()}] No EXIF orientation data found")
                 except Exception as e:
                     print(f"No EXIF orientation or error: {e}")
                 img.save(tmp_path)
-                print(f"[{datetime.now()}] Image auto-orientation completed")
+                print(f"[{datetime.now()}] Image auto-orientation completed and saved")
             except Exception as e:
                 print(f"Error auto-orienting image: {e}")
         else:
