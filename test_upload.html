@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Upload</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        button { padding: 10px 20px; margin: 10px; font-size: 16px; }
+        .status { margin: 20px 0; padding: 10px; border-radius: 5px; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+    </style>
+</head>
+<body>
+    <h1>Test Upload Page</h1>
+    
+    <div>
+        <input type="file" id="fileInput" accept="image/*">
+        <button id="uploadBtn" disabled>Upload Image</button>
+    </div>
+    
+    <div>
+        <button id="cameraBtn">Open Camera</button>
+        <div id="cameraPreview" style="display: none;">
+            <video id="video" autoplay playsinline style="width: 300px; height: 200px;"></video>
+            <canvas id="canvas" style="display: none;"></canvas>
+            <br>
+            <button id="captureBtn">Capture Photo</button>
+            <button id="retakeBtn" style="display: none;">Retake</button>
+        </div>
+    </div>
+    
+    <div id="status" class="status" style="display: none;"></div>
+    
+    <script>
+        console.log('Test page loaded');
+        
+        // Get elements
+        const fileInput = document.getElementById('fileInput');
+        const uploadBtn = document.getElementById('uploadBtn');
+        const cameraBtn = document.getElementById('cameraBtn');
+        const cameraPreview = document.getElementById('cameraPreview');
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const captureBtn = document.getElementById('captureBtn');
+        const retakeBtn = document.getElementById('retakeBtn');
+        const status = document.getElementById('status');
+        
+        console.log('Elements found:', {
+            fileInput, uploadBtn, cameraBtn, cameraPreview, 
+            video, canvas, captureBtn, retakeBtn, status
+        });
+        
+        // File input handling
+        if (fileInput && uploadBtn) {
+            fileInput.addEventListener('change', function() {
+                console.log('File input changed:', this.files);
+                uploadBtn.disabled = !this.files.length;
+            });
+        }
+        
+        // Camera functionality
+        if (cameraBtn) {
+            cameraBtn.addEventListener('click', async function() {
+                console.log('Camera button clicked');
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ 
+                        video: { facingMode: 'environment' } 
+                    });
+                    video.srcObject = stream;
+                    cameraPreview.style.display = 'block';
+                    cameraBtn.textContent = 'Camera Active';
+                    cameraBtn.disabled = true;
+                } catch (err) {
+                    console.error('Camera error:', err);
+                    alert('Camera access denied: ' + err.message);
+                }
+            });
+        }
+        
+        // Capture functionality
+        if (captureBtn) {
+            captureBtn.addEventListener('click', function() {
+                console.log('Capture button clicked');
+                const context = canvas.getContext('2d');
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                context.drawImage(video, 0, 0);
+                
+                canvas.toBlob(function(blob) {
+                    const file = new File([blob], 'camera-photo.jpg', { type: 'image/jpeg' });
+                    const dataTransfer = new DataTransfer();
+                    dataTransfer.items.add(file);
+                    fileInput.files = dataTransfer.files;
+                    uploadBtn.disabled = false;
+                    captureBtn.style.display = 'none';
+                    retakeBtn.style.display = 'inline-block';
+                    video.style.display = 'none';
+                    canvas.style.display = 'block';
+                }, 'image/jpeg', 0.8);
+            });
+        }
+        
+        // Retake functionality
+        if (retakeBtn) {
+            retakeBtn.addEventListener('click', function() {
+                console.log('Retake button clicked');
+                canvas.style.display = 'none';
+                video.style.display = 'block';
+                cameraPreview.style.display = 'none';
+                cameraBtn.textContent = 'Open Camera';
+                cameraBtn.disabled = false;
+                captureBtn.style.display = 'inline-block';
+                retakeBtn.style.display = 'none';
+                fileInput.value = '';
+                uploadBtn.disabled = true;
+            });
+        }
+        
+        // Upload functionality
+        if (uploadBtn) {
+            uploadBtn.addEventListener('click', function() {
+                console.log('Upload button clicked');
+                if (!fileInput.files.length) return;
+                
+                status.textContent = '✅ File ready for upload: ' + fileInput.files[0].name;
+                status.className = 'status success';
+                status.style.display = 'block';
+            });
+        }
+    </script>
+</body>
+</html>

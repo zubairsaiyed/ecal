@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ECAL Image Upload</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/upload.css') }}">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📸 ECAL Image Upload</h1>
+            <p>Upload images to display on your e-paper screen</p>
+        </div>
+        
+        <div class="content">
+            <div class="upload-section">
+                <h2>📁 Upload Image File</h2>
+                <div class="file-input-wrapper">
+                    <div class="file-input">
+                        <span>📁 Click to select an image file</span>
+                        <input type="file" name="file" accept="image/*" id="fileInput">
+                    </div>
+                </div>
+                <button type="button" class="upload-button" id="uploadBtn" disabled>Upload Image</button>
+            </div>
+            
+            <div class="camera-section">
+                <h2>📷 Take Live Photo</h2>
+                <button type="button" class="camera-button" id="cameraBtn">📷 Open Camera</button>
+                
+                <div class="camera-preview" id="cameraPreview">
+                    <video id="video" autoplay playsinline></video>
+                    <canvas id="canvas"></canvas>
+                    <div style="margin-top: 15px;">
+                        <button type="button" class="capture-button" id="captureBtn">📸 Capture Photo</button>
+                        <button type="button" class="capture-button" id="retakeBtn" style="display: none;">🔄 Retake</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="status" id="status"></div>
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p>Processing image...</p>
+            </div>
+        </div>
+    </div>
+    
+    <script src="{{ url_for('static', filename='js/upload.js') }}"></script>
+</body>
+</html>
