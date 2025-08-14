@@ -13,13 +13,14 @@ import epd13in3E
 import time
 from PIL import Image
 
-def display_image(image_path, zoom_to_fit=False):
+def display_image(image_path, zoom_to_fit=False, test_rotation=None):
     """
     Display an image on the 13.3inch e-paper display
     
     Args:
         image_path (str): Path to the image file to display
         zoom_to_fit (bool): If True, scale to fill display (may crop). If False, scale to fit (no cropping).
+        test_rotation (int, optional): Test rotation angle (0, 90, 180, 270) to test display orientation
     
     Note:
         This display has a physical orientation offset - it rotates images 90° clockwise by default.
@@ -80,13 +81,13 @@ def display_image(image_path, zoom_to_fit=False):
                         Himage = Himage.rotate(180, expand=True)
                         print("Applied EXIF rotation: 180° (no compensation needed)")
                     elif orientation_value == 6:
-                        # 90° clockwise rotation - compensate by rotating 270° to counter the display's 90° offset
-                        Himage = Himage.rotate(270, expand=True)
-                        print("Applied EXIF rotation: 90° → compensated with 270° rotation")
-                    elif orientation_value == 8:
-                        # 270° clockwise rotation - compensate by rotating 90° to counter the display's 90° offset
+                        # 90° clockwise rotation - compensate by rotating 90° counter-clockwise to counter the display's 90° offset
                         Himage = Himage.rotate(90, expand=True)
-                        print("Applied EXIF rotation: 270° → compensated with 90° rotation")
+                        print("Applied EXIF rotation: 90° → compensated with 90° counter-clockwise rotation")
+                    elif orientation_value == 8:
+                        # 270° clockwise rotation - compensate by rotating 270° counter-clockwise to counter the display's 90° offset
+                        Himage = Himage.rotate(270, expand=True)
+                        print("Applied EXIF rotation: 270° → compensated with 270° counter-clockwise rotation")
                     else:
                         print(f"No rotation needed for orientation {orientation_value}")
                     
@@ -99,6 +100,12 @@ def display_image(image_path, zoom_to_fit=False):
             print(f"Error processing EXIF data: {e}")
             import traceback
             traceback.print_exc()
+        
+        # Test rotation override (for debugging display orientation)
+        if test_rotation is not None:
+            print(f"Applying test rotation: {test_rotation}°")
+            Himage = Himage.rotate(test_rotation, expand=True)
+            print(f"Image size after test rotation: {Himage.size}")
         
         # Resize image to fit the display if necessary
         if Himage.size != (epd13in3E.EPD_WIDTH, epd13in3E.EPD_HEIGHT):
@@ -173,9 +180,11 @@ def main():
                        help='Time to display the image in seconds (default: 3)')
     parser.add_argument('--zoom-to-fit', action='store_true',
                        help='Scale to fill display (may crop image). Default is to fit without cropping.')
+    parser.add_argument('--test-rotation', type=int, choices=[0, 90, 180, 270],
+                       help='Test rotation: apply specific rotation angle to test display orientation')
     args = parser.parse_args()
     
-    success = display_image(args.image_path, args.zoom_to_fit)
+    success = display_image(args.image_path, args.zoom_to_fit, args.test_rotation)
     if success:
         print("Image displayed successfully!")
     else:
