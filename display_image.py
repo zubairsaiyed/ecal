@@ -20,6 +20,10 @@ def display_image(image_path, zoom_to_fit=False):
     Args:
         image_path (str): Path to the image file to display
         zoom_to_fit (bool): If True, scale to fill display (may crop). If False, scale to fit (no cropping).
+    
+    Note:
+        This display has a physical orientation offset - it rotates images 90° clockwise by default.
+        When honoring EXIF orientation data, we compensate for this offset to ensure correct display.
     """
     print("13.3inch e-paper (E) Image Display...")
     
@@ -69,16 +73,20 @@ def display_image(image_path, zoom_to_fit=False):
                     orientation_value = exif.get(orientation, None)
                     print(f"EXIF orientation value: {orientation_value}")
                     
-                    # Apply EXIF rotation
+                    # Apply EXIF rotation with compensation for display's physical orientation
+                    # The display rotates images 90° clockwise by default, so we need to compensate
                     if orientation_value == 3:
+                        # 180° rotation - no compensation needed (180° is symmetric)
                         Himage = Himage.rotate(180, expand=True)
-                        print("Applied EXIF rotation: 180°")
+                        print("Applied EXIF rotation: 180° (no compensation needed)")
                     elif orientation_value == 6:
-                        Himage = Himage.rotate(90, expand=True)
-                        print("Applied EXIF rotation: 90°")
-                    elif orientation_value == 8:
+                        # 90° clockwise rotation - compensate by rotating 270° to counter the display's 90° offset
                         Himage = Himage.rotate(270, expand=True)
-                        print("Applied EXIF rotation: 270°")
+                        print("Applied EXIF rotation: 90° → compensated with 270° rotation")
+                    elif orientation_value == 8:
+                        # 270° clockwise rotation - compensate by rotating 90° to counter the display's 90° offset
+                        Himage = Himage.rotate(90, expand=True)
+                        print("Applied EXIF rotation: 270° → compensated with 90° rotation")
                     else:
                         print(f"No rotation needed for orientation {orientation_value}")
                     
