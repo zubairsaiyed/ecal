@@ -17,27 +17,15 @@
             <div class="upload-section">
                 <h2>📁 Upload Image File</h2>
                 <div class="file-input-wrapper">
-                    <div class="file-input">
+                    <div class="file-input" id="fileInputWrapper">
                         <span>📁 Click to select an image file</span>
-                        <input type="file" name="file" accept="image/*" id="fileInput">
+                        <input type="file" name="file" accept="image/*" id="fileInput" style="cursor: pointer;">
                     </div>
                 </div>
                 <button type="button" class="upload-button" id="uploadBtn" disabled>Upload Image</button>
             </div>
             
-            <div class="camera-section">
-                <h2>📷 Take Live Photo</h2>
-                <button type="button" class="camera-button" id="cameraBtn">📷 Open Camera</button>
-                
-                <div class="camera-preview" id="cameraPreview">
-                    <video id="video" autoplay playsinline></video>
-                    <canvas id="canvas"></canvas>
-                    <div style="margin-top: 15px;">
-                        <button type="button" class="capture-button" id="captureBtn">📸 Capture Photo</button>
-                        <button type="button" class="capture-button" id="retakeBtn" style="display: none;">🔄 Retake</button>
-                    </div>
-                </div>
-            </div>
+
             
             <div class="status" id="status"></div>
             <div class="loading" id="loading">

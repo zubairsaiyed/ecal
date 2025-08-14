@@ -59,6 +59,7 @@ body {
 }
 
 .file-input {
+    position: relative;
     width: 100%;
     padding: 15px;
     border: 2px dashed #ddd;
@@ -67,90 +68,38 @@ body {
     cursor: pointer;
     transition: all 0.3s ease;
     background: #f8f9fa;
+    min-height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .file-input:hover {
     border-color: #4facfe;
     background: #f0f8ff;
+    transform: translateY(-1px);
+    box-shadow: 0 5px 15px rgba(79, 172, 254, 0.2);
+}
+
+.file-input:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 8px rgba(79, 172, 254, 0.3);
 }
 
 .file-input input[type="file"] {
     position: absolute;
+    top: 0;
+    left: 0;
     opacity: 0;
     width: 100%;
     height: 100%;
     cursor: pointer;
+    z-index: 10;
 }
 
-.camera-section {
-    margin-bottom: 30px;
-    text-align: center;
-}
 
-.camera-section h2 {
-    color: #333;
-    margin-bottom: 20px;
-    font-size: 1.5rem;
-}
 
-.camera-button {
-    background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
-    color: white;
-    border: none;
-    padding: 15px 30px;
-    border-radius: 25px;
-    font-size: 1.1rem;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    box-shadow: 0 5px 15px rgba(238, 90, 36, 0.3);
-}
 
-.camera-button:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 20px rgba(238, 90, 36, 0.4);
-}
-
-.camera-button:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-    transform: none;
-}
-
-.camera-preview {
-    margin-top: 20px;
-    display: none;
-}
-
-.camera-preview video {
-    width: 100%;
-    max-width: 400px;
-    border-radius: 10px;
-    box-shadow: 0 5px 15px rgba(0,0,0,0.2);
-}
-
-.camera-preview canvas {
-    display: none;
-    width: 100%;
-    max-width: 400px;
-    border-radius: 10px;
-}
-
-.capture-button {
-    background: linear-gradient(135deg, #00b894 0%, #00a085 100%);
-    color: white;
-    border: none;
-    padding: 12px 25px;
-    border-radius: 20px;
-    font-size: 1rem;
-    cursor: pointer;
-    margin: 10px;
-    transition: all 0.3s ease;
-}
-
-.capture-button:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 5px 15px rgba(0, 184, 148, 0.3);
-}
 
 .upload-button {
     background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
@@ -163,6 +112,8 @@ body {
     width: 100%;
     transition: all 0.3s ease;
     box-shadow: 0 5px 15px rgba(79, 172, 254, 0.3);
+    position: relative;
+    z-index: 5;
 }
 
 .upload-button:hover {
@@ -234,8 +185,8 @@ body {
         padding: 20px;
     }
     
-    .camera-button, .upload-button {
-        padding: 12px 25px;
-        font-size: 1rem;
-    }
+                    .upload-button {
+                    padding: 12px 25px;
+                    font-size: 1rem;
+                }
 }
