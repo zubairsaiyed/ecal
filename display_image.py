@@ -13,7 +13,7 @@ import epd13in3E
 import time
 from PIL import Image
 
-def display_image(image_path, zoom_to_fit=False, test_rotation=None):
+def display_image(image_path, zoom_to_fit=False, test_rotation=None, no_exif=False):
     """
     Display an image on the 13.3inch e-paper display
     
@@ -21,6 +21,7 @@ def display_image(image_path, zoom_to_fit=False, test_rotation=None):
         image_path (str): Path to the image file to display
         zoom_to_fit (bool): If True, scale to fill display (may crop). If False, scale to fit (no cropping).
         test_rotation (int, optional): Test rotation angle (0, 90, 180, 270) to test display orientation
+        no_exif (bool): If True, disable EXIF rotation handling
     
     Note:
         This display has a physical orientation offset - it rotates images 90° clockwise by default.
@@ -56,7 +57,10 @@ def display_image(image_path, zoom_to_fit=False, test_rotation=None):
         # Handle EXIF orientation data (backup handler)
         # Note: The server should have already rotated the image, but this ensures
         # the display script also honors EXIF data as a fallback
-        try:
+        if no_exif:
+            print("EXIF rotation handling disabled")
+        else:
+            try:
             from PIL import ExifTags
             exif = Himage.getexif()
             if exif is not None:
@@ -76,16 +80,21 @@ def display_image(image_path, zoom_to_fit=False, test_rotation=None):
                     
                     # Apply EXIF rotation with compensation for display's physical orientation
                     # The display rotates images 90° clockwise by default, so we need to compensate
+                    print(f"Display physical offset: 90° clockwise")
+                    print(f"EXIF orientation: {orientation_value}")
+                    
                     if orientation_value == 3:
                         # 180° rotation - no compensation needed (180° is symmetric)
                         Himage = Himage.rotate(180, expand=True)
                         print("Applied EXIF rotation: 180° (no compensation needed)")
                     elif orientation_value == 6:
-                        # 90° clockwise rotation - compensate by rotating 90° counter-clockwise to counter the display's 90° offset
+                        # 90° clockwise rotation - try simple 90° counter-clockwise
+                        print("EXIF 6 (90° clockwise) → applying 90° counter-clockwise")
                         Himage = Himage.rotate(90, expand=True)
                         print("Applied EXIF rotation: 90° → compensated with 90° counter-clockwise rotation")
                     elif orientation_value == 8:
-                        # 270° clockwise rotation - compensate by rotating 270° counter-clockwise to counter the display's 90° offset
+                        # 270° clockwise rotation - try simple 270° counter-clockwise
+                        print("EXIF 8 (270° clockwise) → applying 270° counter-clockwise")
                         Himage = Himage.rotate(270, expand=True)
                         print("Applied EXIF rotation: 270° → compensated with 270° counter-clockwise rotation")
                     else:
@@ -96,10 +105,10 @@ def display_image(image_path, zoom_to_fit=False, test_rotation=None):
                     print("No EXIF orientation data found")
             else:
                 print("No EXIF data found")
-        except Exception as e:
-            print(f"Error processing EXIF data: {e}")
-            import traceback
-            traceback.print_exc()
+            except Exception as e:
+                print(f"Error processing EXIF data: {e}")
+                import traceback
+                traceback.print_exc()
         
         # Test rotation override (for debugging display orientation)
         if test_rotation is not None:
@@ -182,9 +191,11 @@ def main():
                        help='Scale to fill display (may crop image). Default is to fit without cropping.')
     parser.add_argument('--test-rotation', type=int, choices=[0, 90, 180, 270],
                        help='Test rotation: apply specific rotation angle to test display orientation')
+    parser.add_argument('--no-exif', action='store_true',
+                       help='Disable EXIF rotation handling - use manual rotation only')
     args = parser.parse_args()
     
-    success = display_image(args.image_path, args.zoom_to_fit, args.test_rotation)
+    success = display_image(args.image_path, args.zoom_to_fit, args.test_rotation, args.no_exif)
     if success:
         print("Image displayed successfully!")
     else:
