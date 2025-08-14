@@ -18,37 +18,57 @@ def upload_image():
     file = request.files['file']
     if file.filename == '':
         return jsonify({'error': 'No selected file'}), 400
+    
+    # Get auto-rotate preference
+    auto_rotate = request.form.get('auto_rotate', 'true').lower() == 'true'
+    print(f"[{datetime.now()}] Auto-rotate setting: {auto_rotate}")
+    
     try:
         # Save to a temporary file
         with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
             file.save(tmp)
             tmp_path = tmp.name
         print(f"[{datetime.now()}] Received file saved to {tmp_path}")
-        # Auto-orient the image using Pillow
-        try:
-            img = Image.open(tmp_path)
+        
+        # Auto-orient the image using Pillow (only if enabled)
+        if auto_rotate:
             try:
-                exif = img.getexif()
-                orientation = None
-                for tag, value in ExifTags.TAGS.items():
-                    if value == 'Orientation':
-                        orientation = tag
-                        break
-                if exif is not None and orientation is not None:
-                    orientation_value = exif.get(orientation, None)
-                    if orientation_value == 3:
-                        img = img.rotate(180, expand=True)
-                    elif orientation_value == 6:
-                        img = img.rotate(270, expand=True)
-                    elif orientation_value == 8:
-                        img = img.rotate(90, expand=True)
+                img = Image.open(tmp_path)
+                try:
+                    exif = img.getexif()
+                    orientation = None
+                    for tag, value in ExifTags.TAGS.items():
+                        if value == 'Orientation':
+                            orientation = tag
+                            break
+                    if exif is not None and orientation is not None:
+                        orientation_value = exif.get(orientation, None)
+                        if orientation_value == 3:
+                            img = img.rotate(180, expand=True)
+                            print(f"[{datetime.now()}] Rotated image 180°")
+                        elif orientation_value == 6:
+                            img = img.rotate(270, expand=True)
+                            print(f"[{datetime.now()}] Rotated image 270°")
+                        elif orientation_value == 8:
+                            img = img.rotate(90, expand=True)
+                            print(f"[{datetime.now()}] Rotated image 90°")
+                except Exception as e:
+                    print(f"No EXIF orientation or error: {e}")
+                img.save(tmp_path)
+                print(f"[{datetime.now()}] Image auto-orientation completed")
             except Exception as e:
-                print(f"No EXIF orientation or error: {e}")
-            img.save(tmp_path)
-        except Exception as e:
-            print(f"Error auto-orienting image: {e}")
+                print(f"Error auto-orienting image: {e}")
+        else:
+            print(f"[{datetime.now()}] Auto-rotation disabled, keeping original orientation")
+        
         # Call the display_image.py script
-        result = subprocess.run([sys.executable, IMAGE_SCRIPT, tmp_path], capture_output=True, text=True)
+        # Pass the disable_rotation parameter
+        cmd = [sys.executable, IMAGE_SCRIPT, tmp_path]
+        if not auto_rotate:
+            cmd.append('--disable-rotation')
+        
+        print(f"[{datetime.now()}] Running display command: {' '.join(cmd)}")
+        result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != 0:
             print(f"display_image.py failed: {result.stderr}")
             os.remove(tmp_path)

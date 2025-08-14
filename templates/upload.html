@@ -22,6 +22,19 @@
                         <input type="file" name="file" accept="image/*" id="fileInput" style="cursor: pointer;">
                     </div>
                 </div>
+                
+                <!-- Auto-rotation option -->
+                <div class="rotation-option">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="autoRotate">
+                        <span class="checkmark"></span>
+                        <span class="label-text">🔄 Auto-rotate image for better display fit</span>
+                    </label>
+                    <div style="margin-top: 5px; font-size: 12px; color: #666;">
+                        When enabled, images may be rotated 90° for optimal display scaling
+                    </div>
+                </div>
+                
                 <button type="button" class="upload-button" id="uploadBtn" disabled>Upload Image</button>
             </div>
             

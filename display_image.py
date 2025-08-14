@@ -13,13 +13,14 @@ import epd13in3E
 import time
 from PIL import Image
 
-def display_image(image_path, zoom_to_fit=False):
+def display_image(image_path, zoom_to_fit=False, disable_rotation=False):
     """
     Display an image on the 13.3inch e-paper display
     
     Args:
         image_path (str): Path to the image file to display
         zoom_to_fit (bool): If True, scale to fill display (may crop). If False, scale to fit (no cropping).
+        disable_rotation (bool): If True, disable automatic rotation for better fit. If False, allow automatic rotation.
     """
     print("13.3inch e-paper (E) Image Display...")
     
@@ -76,7 +77,7 @@ def display_image(image_path, zoom_to_fit=False):
             # Only rotate if the rotated version provides significantly better scaling
             # and the image aspect ratio is very different from display
             should_rotate = False
-            if rotated_scale > normal_scale * 1.1:  # 10% improvement threshold
+            if not disable_rotation and rotated_scale > normal_scale * 1.1:  # 10% improvement threshold
                 # Check if the image is significantly different in aspect ratio
                 image_ratio = original_width / original_height
                 display_ratio = display_width / display_height
@@ -89,7 +90,10 @@ def display_image(image_path, zoom_to_fit=False):
                 else:
                     print("Image aspect ratio is close to display ratio, keeping original orientation")
             else:
-                print("Normal orientation provides better or similar scaling")
+                if disable_rotation:
+                    print("Auto-rotation disabled by user preference")
+                else:
+                    print("Normal orientation provides better or similar scaling")
             
             if should_rotate:
                 Himage = Himage.rotate(90, expand=True)
@@ -156,10 +160,12 @@ def main():
                        help='Time to display the image in seconds (default: 3)')
     parser.add_argument('--zoom-to-fit', action='store_true',
                        help='Scale to fill display (may crop image). Default is to fit without cropping.')
+    parser.add_argument('--disable-rotation', action='store_true',
+                       help='Disable automatic rotation for better display fit. Keep original image orientation.')
     
     args = parser.parse_args()
     
-    success = display_image(args.image_path, args.zoom_to_fit)
+    success = display_image(args.image_path, args.zoom_to_fit, args.disable_rotation)
     if success:
         print("Image displayed successfully!")
     else:
