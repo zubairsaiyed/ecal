@@ -41,6 +41,11 @@ def upload_image():
     if file.filename == '':
         return jsonify({'error': 'No selected file'}), 400
     
+    # Get display options
+    auto_rotate = request.form.get('auto_rotate', 'true').lower() == 'true'
+    auto_zoom = request.form.get('auto_zoom', 'true').lower() == 'true'
+    print(f"[{datetime.now()}] Display options - Auto-rotate: {auto_rotate}, Auto-zoom: {auto_zoom}")
+    
     tmp_path = None
     img = None
     
@@ -84,9 +89,15 @@ def upload_image():
             import traceback
             traceback.print_exc()
         
-        # Call the display_image.py script
-        print(f"[{datetime.now()}] Running display command: {' '.join([sys.executable, IMAGE_SCRIPT, tmp_path])}")
-        result = subprocess.run([sys.executable, IMAGE_SCRIPT, tmp_path], capture_output=True, text=True)
+        # Call the display_image.py script with display options
+        cmd = [sys.executable, IMAGE_SCRIPT, tmp_path]
+        if not auto_rotate:
+            cmd.append('--no-auto-rotate')
+        if not auto_zoom:
+            cmd.append('--no-auto-zoom')
+        
+        print(f"[{datetime.now()}] Running display command: {' '.join(cmd)}")
+        result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != 0:
             print(f"display_image.py failed: {result.stderr}")
             if tmp_path and os.path.exists(tmp_path):

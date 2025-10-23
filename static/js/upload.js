@@ -81,6 +81,14 @@ document.addEventListener('DOMContentLoaded', function() {
             const formData = new FormData();
             formData.append('file', fileInput.files[0]);
             
+            // Add display options
+            const autoRotate = document.getElementById('autoRotate').checked;
+            const autoZoom = document.getElementById('autoZoom').checked;
+            formData.append('auto_rotate', autoRotate);
+            formData.append('auto_zoom', autoZoom);
+            console.log('Auto-rotate setting:', autoRotate);
+            console.log('Auto-zoom setting:', autoZoom);
+            
             // Show loading
             loading.style.display = 'block';
             status.style.display = 'none';

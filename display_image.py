@@ -13,7 +13,7 @@ import epd13in3E
 import time
 from PIL import Image
 
-def display_image(image_path, zoom_to_fit=False, test_rotation=None, auto_rotate_to_fit=True):
+def display_image(image_path, zoom_to_fit=False, test_rotation=None, auto_rotate_to_fit=True, auto_zoom_after_rotation=True):
     """
     Display an image on the 13.3inch e-paper display
     
@@ -22,10 +22,12 @@ def display_image(image_path, zoom_to_fit=False, test_rotation=None, auto_rotate
         zoom_to_fit (bool): If True, scale to fill display (may crop). If False, scale to fit (no cropping).
         test_rotation (int, optional): Test rotation angle (0, 90, 180, 270) to test display orientation
         auto_rotate_to_fit (bool): If True, automatically rotate image 90° if it maximizes screen usage
+        auto_zoom_after_rotation (bool): If True, automatically zoom to fill display after rotation
     
     Note:
         Auto-rotate-to-fit intelligently rotates images to maximize screen usage by comparing
         the aspect ratios of the image and display, rotating if it improves screen coverage by >5%.
+        When combined with auto_zoom_after_rotation, images are rotated AND zoomed to fill the frame.
     """
     print("13.3inch e-paper (E) Image Display...")
     
@@ -61,6 +63,7 @@ def display_image(image_path, zoom_to_fit=False, test_rotation=None, auto_rotate
             print(f"Image size after test rotation: {Himage.size}")
         
         # Auto-rotate to maximize screen usage
+        image_was_rotated = False
         if auto_rotate_to_fit:
             img_width, img_height = Himage.size
             display_width, display_height = epd13in3E.EPD_WIDTH, epd13in3E.EPD_HEIGHT
@@ -81,6 +84,12 @@ def display_image(image_path, zoom_to_fit=False, test_rotation=None, auto_rotate
                 print(f"  Improvement: {((area_with_rotation / area_no_rotation - 1) * 100):.1f}%")
                 Himage = Himage.rotate(90, expand=True)
                 print(f"  Image size after auto-rotation: {Himage.size}")
+                image_was_rotated = True
+                
+                # Auto-zoom after rotation if enabled
+                if auto_zoom_after_rotation:
+                    print(f"  Auto-zoom enabled: image will fill the display frame (may crop)")
+                    zoom_to_fit = True
             else:
                 print(f"No auto-rotation needed (current orientation maximizes screen usage)")
         
@@ -160,10 +169,13 @@ def main():
                        help='Test rotation: apply specific rotation angle to test display orientation')
     parser.add_argument('--no-auto-rotate', action='store_true',
                        help='Disable automatic rotation to maximize screen usage')
+    parser.add_argument('--no-auto-zoom', action='store_true',
+                       help='Disable automatic zoom-to-fill after rotation')
     args = parser.parse_args()
     
     success = display_image(args.image_path, args.zoom_to_fit, args.test_rotation, 
-                           auto_rotate_to_fit=not args.no_auto_rotate)
+                           auto_rotate_to_fit=not args.no_auto_rotate,
+                           auto_zoom_after_rotation=not args.no_auto_zoom)
     if success:
         print("Image displayed successfully!")
     else:
