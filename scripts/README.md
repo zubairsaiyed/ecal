@@ -1,10 +1,16 @@
 # ECAL Display Installation Scripts
 
-This directory contains scripts for setting up and managing the ECAL Display service on Raspberry Pi.
+This directory contains scripts for setting up and managing the ECAL Display system on Raspberry Pi and compute machines.
 
-## Scripts
+## Scripts Overview
 
-### `install_display_pi.sh`
+### For Display Client: `install_display_pi.sh`
+### For Compute Server: `install_compute_pi.sh`
+### For Cleanup: `uninstall_display_pi.sh`
+
+---
+
+## `install_display_pi.sh`
 
 **Purpose:** Installs the ECAL Display service as a systemd service with dual-mode support.
 
@@ -39,6 +45,63 @@ sudo journalctl -u ecal-display -f
 
 ---
 
+## `install_compute_pi.sh`
+
+**Purpose:** Installs the calendar server and sync service on a compute/server machine.
+
+**What it does:**
+- Installs chromium-browser for screenshot generation
+- Creates log directory at `/var/log/ecal`
+- Prompts for Display Pi IP/hostname and configuration
+- Creates `calendar_sync_config.env` with settings
+- Installs two systemd services:
+  - `ecal-calendar-server.service` - Calendar web application
+  - `ecal-calendar-sync.service` - Screenshot generation and upload
+- Enables automatic startup on boot
+
+**Usage:**
+```bash
+sudo ./scripts/install_compute_pi.sh
+```
+
+**Interactive Prompts:**
+- Display Pi IP address/hostname (default: `raspberrypi.local`)
+- Display Pi port (default: `8000`)
+- Calendar server port (default: `5000`)
+- Update mode (dev or scheduled)
+- Poll interval (dev mode) or sleep hours (scheduled mode)
+
+**Requirements:**
+- Must be run with sudo
+- Virtual environment should be set up
+- Display Pi should be accessible on the network
+
+**After installation:**
+```bash
+# Start both services
+sudo systemctl start ecal-calendar-server
+sudo systemctl start ecal-calendar-sync
+
+# Check status
+sudo systemctl status ecal-calendar-server
+sudo systemctl status ecal-calendar-sync
+
+# View logs
+sudo journalctl -u ecal-calendar-sync -f
+```
+
+**Configuration file:**
+Settings are saved to `calendar_sync_config.env` for reference. To change settings:
+1. Edit the systemd service file directly or
+2. Reconfigure and reinstall
+
+**Test connectivity to Display Pi:**
+```bash
+curl http://DISPLAY_PI_IP:8000
+```
+
+---
+
 ### `uninstall_display_pi.sh`
 
 **Purpose:** Removes the ECAL Display service from the system.
@@ -61,6 +124,74 @@ sudo ./scripts/uninstall_display_pi.sh
 - Confirms uninstallation
 - Asks whether to remove log directory
 - Asks whether to remove config.json and PID files
+
+---
+
+## Two-Machine Deployment (Recommended)
+
+This is the recommended architecture: one machine generates calendar screenshots, another displays them.
+
+### Machine 1: Compute/Server Pi
+
+**Setup:**
+```bash
+# 1. Navigate to project
+cd /path/to/ecal
+
+# 2. Set up virtual environment
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+# 3. Install calendar server and sync service
+sudo ./scripts/install_compute_pi.sh
+```
+
+**The script will prompt for:**
+- Display Pi IP/hostname
+- Ports and update intervals
+- Mode (dev or scheduled)
+
+**Start services:**
+```bash
+sudo systemctl start ecal-calendar-server
+sudo systemctl start ecal-calendar-sync
+```
+
+### Machine 2: Display Pi
+
+**Setup:**
+```bash
+# 1. Navigate to project
+cd /home/zuperzz/code/ecal
+
+# 2. Set up virtual environment
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+# 3. Install display service
+sudo ./scripts/install_display_pi.sh
+
+# 4. Start service
+sudo systemctl start ecal-display
+```
+
+**Verify:**
+- Access upload form: `http://DISPLAY_PI_IP:8000/upload_form`
+- Upload a test image
+- Check e-paper display updates
+
+**Architecture:**
+```
+┌─────────────────────┐          ┌─────────────────────┐
+│   Compute/Server    │          │   Display Pi        │
+│                     │  HTTP    │                     │
+│  Calendar Server ───┼─────────>│  Image Receiver     │
+│  Calendar Sync      │  Upload  │  (Port 8000)        │
+│  (Chromium)         │  Images  │                     │
+└─────────────────────┘          └─────────────────────┘
+```
 
 ---
 
