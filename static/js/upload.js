@@ -8,9 +8,95 @@ window.addEventListener('error', function(e) {
     console.error('Global error:', e.error);
 });
 
+// Load current mode
+async function loadCurrentMode() {
+    try {
+        const response = await fetch('/mode');
+        const data = await response.json();
+        updateModeUI(data.mode);
+    } catch (error) {
+        console.error('Error loading mode:', error);
+    }
+}
+
+// Update mode UI
+function updateModeUI(mode) {
+    const modeBadge = document.getElementById('currentMode');
+    const switchBtn = document.getElementById('modeSwitchBtn');
+    
+    if (mode === 'image_receiver') {
+        modeBadge.textContent = '📸 Image Receiver';
+        modeBadge.classList.remove('calendar');
+        switchBtn.textContent = '🔄 Switch to Calendar Sync';
+    } else if (mode === 'calendar_sync') {
+        modeBadge.textContent = '📅 Calendar Sync';
+        modeBadge.classList.add('calendar');
+        switchBtn.textContent = '🔄 Switch to Image Receiver';
+    }
+}
+
+// Switch mode
+async function switchMode() {
+    const modeBadge = document.getElementById('currentMode');
+    const switchBtn = document.getElementById('modeSwitchBtn');
+    const status = document.getElementById('status');
+    
+    // Determine target mode
+    const currentMode = modeBadge.textContent.includes('Calendar') ? 'calendar_sync' : 'image_receiver';
+    const targetMode = currentMode === 'image_receiver' ? 'calendar_sync' : 'image_receiver';
+    
+    // Confirm with user
+    const confirmed = confirm(`Switch to ${targetMode === 'calendar_sync' ? 'Calendar Sync' : 'Image Receiver'} mode?\n\nNote: The service will restart and this page may become unavailable if switching to Calendar Sync mode.`);
+    
+    if (!confirmed) return;
+    
+    switchBtn.disabled = true;
+    switchBtn.textContent = '⏳ Switching...';
+    
+    try {
+        const response = await fetch('/mode/switch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mode: targetMode })
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            status.textContent = `✅ ${result.message}`;
+            status.className = 'status success';
+            status.style.display = 'block';
+            
+            updateModeUI(targetMode);
+            
+            // If switching to calendar sync, show a message about the service
+            if (targetMode === 'calendar_sync') {
+                setTimeout(() => {
+                    status.textContent = '📅 Now in Calendar Sync mode. The image upload interface is disabled.';
+                }, 2000);
+            }
+        } else {
+            status.textContent = `❌ Failed to switch mode: ${result.error}`;
+            status.className = 'status error';
+            status.style.display = 'block';
+        }
+    } catch (error) {
+        console.error('Mode switch error:', error);
+        status.textContent = '❌ Error switching mode: ' + error.message;
+        status.className = 'status error';
+        status.style.display = 'block';
+    } finally {
+        switchBtn.disabled = false;
+        loadCurrentMode();  // Reload to confirm
+    }
+}
+
 // Wait for DOM to be fully loaded
 document.addEventListener('DOMContentLoaded', function() {
     console.log('DOM fully loaded');
+    
+    // Load current mode on page load
+    loadCurrentMode();
     
     // Get all required elements
     const fileInput = document.getElementById('fileInput');
@@ -126,6 +212,13 @@ document.addEventListener('DOMContentLoaded', function() {
         
     } else {
         console.error('File input or upload button not found!');
+    }
+    
+    // Mode switch button click event
+    const modeSwitchBtn = document.getElementById('modeSwitchBtn');
+    if (modeSwitchBtn) {
+        modeSwitchBtn.addEventListener('click', switchMode);
+        console.log('Mode switch button listener attached');
     }
 
     // File input wrapper click event

@@ -5,17 +5,44 @@ import tempfile
 import subprocess
 import sys
 import gc
+import json
 from datetime import datetime
 from PIL import Image
 
 app = Flask(__name__)
 
 IMAGE_SCRIPT = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'display_image.py')
+CONFIG_FILE = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'config.json')
+SERVICE_MANAGER = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'service_manager.py')
 
 # Memory optimization settings
 MAX_IMAGE_DIMENSION = 2000  # Maximum dimension for large images
 COMPRESSION_QUALITY = 6      # PNG compression level (0-9, lower = smaller file)
 ENABLE_MEMORY_OPTIMIZATION = True
+
+def load_config():
+    """Load configuration from JSON file"""
+    if os.path.exists(CONFIG_FILE):
+        with open(CONFIG_FILE, 'r') as f:
+            return json.load(f)
+    # Return default config if file doesn't exist
+    return {
+        'mode': 'image_receiver',
+        'calendar_sync': {
+            'calendar_url': 'http://localhost:5000',
+            'poll_interval': 10,
+            'scheduled': False
+        },
+        'image_receiver': {
+            'host': '0.0.0.0',
+            'port': 8000
+        }
+    }
+
+def save_config(config):
+    """Save configuration to JSON file"""
+    with open(CONFIG_FILE, 'w') as f:
+        json.dump(config, f, indent=2)
 
 def optimize_image_memory(img):
     """Optimize image for memory usage"""
@@ -209,6 +236,106 @@ def upload_form():
     except Exception as e:
         print(f"Error rendering template: {e}")
         return f"Template error: {e}", 500
+
+@app.route('/mode', methods=['GET', 'POST'])
+def mode():
+    """Get or set the operating mode"""
+    if request.method == 'POST':
+        try:
+            data = request.get_json()
+            new_mode = data.get('mode')
+            
+            if new_mode not in ['image_receiver', 'calendar_sync']:
+                return jsonify({'error': 'Invalid mode. Must be image_receiver or calendar_sync'}), 400
+            
+            config = load_config()
+            config['mode'] = new_mode
+            save_config(config)
+            
+            return jsonify({
+                'status': 'success',
+                'message': f'Mode set to {new_mode}',
+                'mode': new_mode,
+                'note': 'Restart the service for changes to take effect'
+            })
+        except Exception as e:
+            return jsonify({'error': str(e)}), 400
+    
+    # GET request - return current mode
+    config = load_config()
+    return jsonify({
+        'mode': config.get('mode', 'image_receiver'),
+        'available_modes': ['image_receiver', 'calendar_sync']
+    })
+
+@app.route('/mode/switch', methods=['POST'])
+def switch_mode():
+    """Switch mode and restart service"""
+    try:
+        data = request.get_json()
+        new_mode = data.get('mode')
+        
+        if new_mode not in ['image_receiver', 'calendar_sync']:
+            return jsonify({'error': 'Invalid mode. Must be image_receiver or calendar_sync'}), 400
+        
+        # Use service manager to switch mode
+        result = subprocess.run(
+            [sys.executable, SERVICE_MANAGER, 'switch', new_mode],
+            capture_output=True,
+            text=True
+        )
+        
+        if result.returncode == 0:
+            return jsonify({
+                'status': 'success',
+                'message': f'Switched to {new_mode} mode and restarted service',
+                'mode': new_mode
+            })
+        else:
+            return jsonify({
+                'error': 'Failed to switch mode',
+                'details': result.stderr
+            }), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/mode/config', methods=['GET', 'POST'])
+def mode_config():
+    """Get or update mode-specific configuration"""
+    config = load_config()
+    
+    if request.method == 'POST':
+        try:
+            data = request.get_json()
+            mode_type = data.get('mode_type')
+            
+            if mode_type == 'calendar_sync':
+                if 'calendar_url' in data:
+                    config['calendar_sync']['calendar_url'] = data['calendar_url']
+                if 'poll_interval' in data:
+                    config['calendar_sync']['poll_interval'] = int(data['poll_interval'])
+                if 'scheduled' in data:
+                    config['calendar_sync']['scheduled'] = bool(data['scheduled'])
+                if 'sleep_hours' in data:
+                    config['calendar_sync']['sleep_hours'] = int(data['sleep_hours'])
+            elif mode_type == 'image_receiver':
+                if 'host' in data:
+                    config['image_receiver']['host'] = data['host']
+                if 'port' in data:
+                    config['image_receiver']['port'] = int(data['port'])
+            
+            save_config(config)
+            
+            return jsonify({
+                'status': 'success',
+                'message': 'Configuration updated',
+                'config': config
+            })
+        except Exception as e:
+            return jsonify({'error': str(e)}), 400
+    
+    # GET request
+    return jsonify(config)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8000)
