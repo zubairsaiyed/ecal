@@ -1,91 +1,270 @@
-# Installation Scripts
+# ECAL Display Installation Scripts
 
-This directory contains installation scripts for setting up the ECAL system on Raspberry Pis.
+This directory contains scripts for setting up and managing the ECAL Display service on Raspberry Pi.
 
 ## Scripts
 
 ### `install_display_pi.sh`
-**Purpose**: Sets up the Display Pi (low-memory Pi connected to e-paper display)
 
-**What it does**:
-- Creates a systemd service for `image_receiver_server.py`
+**Purpose:** Installs the ECAL Display service as a systemd service with dual-mode support.
+
+**What it does:**
+- Creates default `config.json` configuration file
+- Makes `service_manager.py` executable
+- Creates log directory at `/var/log/ecal`
+- Installs systemd service file as `ecal-display.service`
 - Enables automatic startup on boot
-- Configures the service to run on port 8000
-- Sets up proper logging and error handling
 
-**Usage**:
+**Usage:**
 ```bash
 sudo ./scripts/install_display_pi.sh
 ```
 
-### `install_compute_pi.sh`
-**Purpose**: Sets up the Compute Pi (higher-memory Pi for calendar processing)
+**Requirements:**
+- Must be run with sudo
+- Virtual environment should be set up (will warn if missing)
+- Running from the project root directory
 
-**What it does**:
-- Installs system dependencies (chromium-browser)
-- Creates systemd services for both `calendar_server.py` and `calendar_sync_service.py`
-- Enables automatic startup on boot
-- Configures proper service dependencies (sync service waits for calendar server)
-- Sets up the calendar server on port 5000
-- Configures the sync service to run in scheduled mode (12-hour intervals) and upload to Display Pi on port 8000
-
-**Usage**:
+**After installation:**
 ```bash
-sudo ./scripts/install_compute_pi.sh
+# Start the service
+sudo systemctl start ecal-display
+
+# Check status
+sudo systemctl status ecal-display
+
+# View logs
+sudo journalctl -u ecal-display -f
 ```
+
+---
+
+### `uninstall_display_pi.sh`
+
+**Purpose:** Removes the ECAL Display service from the system.
+
+**What it does:**
+- Stops the running service
+- Disables the service from auto-start
+- Removes the systemd service file
+- Optionally removes logs and configuration files
+
+**Usage:**
+```bash
+sudo ./scripts/uninstall_display_pi.sh
+```
+
+**Requirements:**
+- Must be run with sudo
+
+**Interactive prompts:**
+- Confirms uninstallation
+- Asks whether to remove log directory
+- Asks whether to remove config.json and PID files
+
+---
+
+## Installation Flow
+
+### 1. Initial Setup
+
+Before running the installation script, set up your environment:
+
+```bash
+# Clone/navigate to the project
+cd /home/zuperzz/code/ecal
+
+# Create virtual environment
+python3 -m venv venv
+
+# Activate virtual environment
+source venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+```
+
+### 2. Run Installation
+
+```bash
+sudo ./scripts/install_display_pi.sh
+```
+
+The script will:
+1. ✅ Check for virtual environment
+2. ✅ Create log directory
+3. ✅ Create default config.json (if not exists)
+4. ✅ Make service_manager.py executable
+5. ✅ Install systemd service
+6. ✅ Enable auto-start on boot
+
+### 3. Start the Service
+
+```bash
+sudo systemctl start ecal-display
+```
+
+The service will start in the mode specified in `config.json` (default: `image_receiver`).
+
+---
 
 ## Service Management
 
-After installation, you can manage the services using systemctl:
+### Using systemd
 
-**Display Pi Services**:
-- `ecal-image-server` - Image receiver server
-
-**Compute Pi Services**:
-- `ecal-calendar-server` - Calendar web server
-- `ecal-calendar-sync` - Calendar sync service
-
-**Common Commands**:
 ```bash
-# Check service status
-sudo systemctl status ecal-image-server
-sudo systemctl status ecal-calendar-server
-sudo systemctl status ecal-calendar-sync
+# Start service
+sudo systemctl start ecal-display
 
-# View logs (systemd)
-sudo journalctl -u ecal-image-server -f
-sudo journalctl -u ecal-calendar-server -f
-sudo journalctl -u ecal-calendar-sync -f
+# Stop service
+sudo systemctl stop ecal-display
 
-# View logs (file-based)
-tail -f /var/log/ecal/image-server.log
-tail -f /var/log/ecal/calendar-server.log
-tail -f /var/log/ecal/calendar-sync.log
+# Restart service
+sudo systemctl restart ecal-display
 
-# Restart services
-sudo systemctl restart ecal-image-server
-sudo systemctl restart ecal-calendar-server
-sudo systemctl restart ecal-calendar-sync
+# Check status
+sudo systemctl status ecal-display
+
+# View logs
+sudo journalctl -u ecal-display -f
+
+# Disable auto-start
+sudo systemctl disable ecal-display
+
+# Re-enable auto-start
+sudo systemctl enable ecal-display
 ```
 
-## Prerequisites
+### Using Service Manager
 
-Before running the installation scripts, ensure:
+```bash
+cd /home/zuperzz/code/ecal
 
-1. **Virtual Environment**: Set up and activated
-   ```bash
-   python3 -m venv venv
-   source venv/bin/activate
-   pip install -r requirements.txt
-   ```
+# Check current mode and status
+python3 service_manager.py status
 
-2. **Google Calendar Setup**: 
-   - `service-account-key.json` file present (for Compute Pi)
+# Switch modes
+python3 service_manager.py switch image_receiver
+python3 service_manager.py switch calendar_sync
 
-3. **Network Configuration**:
-   - Display Pi accessible from Compute Pi
-   - Proper firewall settings for ports 5000 and 8000
+# Manual start/stop (if not using systemd)
+python3 service_manager.py start
+python3 service_manager.py stop
+python3 service_manager.py restart
+```
 
-## Uninstalling
+---
 
-To remove the services, see the main README.md file for uninstallation instructions. 
+## Mode Configuration
+
+The service operates in two modes:
+
+### 📸 Image Receiver Mode
+- Web interface at `http://localhost:8000/upload_form`
+- Manual image uploads
+- Auto-rotation and zoom features
+
+### 📅 Calendar Sync Mode
+- Automatic calendar screenshot capture
+- Change detection
+- Configurable polling intervals
+
+Edit `config.json` to configure mode-specific settings:
+
+```bash
+nano /home/zuperzz/code/ecal/config.json
+```
+
+After editing, restart the service:
+```bash
+sudo systemctl restart ecal-display
+```
+
+---
+
+## Troubleshooting
+
+### Service won't start
+
+```bash
+# Check service status
+sudo systemctl status ecal-display
+
+# View full logs
+sudo journalctl -u ecal-display -n 50
+
+# Check if virtual environment exists
+ls -la /home/zuperzz/code/ecal/venv
+
+# Verify config.json is valid
+cat /home/zuperzz/code/ecal/config.json | python3 -m json.tool
+```
+
+### Permission issues
+
+```bash
+# Check log directory permissions
+ls -la /var/log/ecal
+
+# Fix if needed
+sudo chown -R $USER:$USER /var/log/ecal
+```
+
+### Port already in use
+
+```bash
+# Check what's using port 8000
+sudo lsof -i :8000
+
+# Kill the process if needed
+sudo kill <PID>
+```
+
+---
+
+## File Locations
+
+After installation:
+
+| File/Directory | Location | Purpose |
+|---------------|----------|---------|
+| Service file | `/etc/systemd/system/ecal-display.service` | Systemd service definition |
+| Config file | `/home/zuperzz/code/ecal/config.json` | Mode and settings configuration |
+| Logs | `/var/log/ecal/ecal-display.log` | Service logs |
+| PID file | `/home/zuperzz/code/ecal/service.pid` | Process ID tracking |
+
+---
+
+## Updating After Changes
+
+If you update the code or scripts:
+
+```bash
+# Reload systemd if service file changed
+sudo systemctl daemon-reload
+
+# Restart the service
+sudo systemctl restart ecal-display
+```
+
+---
+
+## Complete Removal
+
+To completely remove the service and all files:
+
+```bash
+# 1. Uninstall the service
+sudo ./scripts/uninstall_display_pi.sh
+
+# 2. Remove project directory (optional)
+rm -rf /home/zuperzz/code/ecal
+```
+
+---
+
+## Additional Resources
+
+- **Mode Switching Guide:** `../MODE_SWITCHING_GUIDE.md`
+- **Memory Optimization:** `../MEMORY_OPTIMIZATION.md`
+- **Service Manager:** `../service_manager.py --help`

@@ -1,12 +1,14 @@
 #!/bin/bash
 
 # Display Pi Installation Script
-# This script sets up the image receiver server for automatic startup
+# This script sets up the ECAL Display service with mode switching support
 
 set -e
 
-echo "=== Display Pi Installation Script ==="
-echo "This will install the image receiver server as a systemd service"
+echo "=== ECAL Display Pi Installation Script ==="
+echo "This will install the ECAL Display service with dual-mode support:"
+echo "  - Image Receiver Mode: Manual image uploads via web interface"
+echo "  - Calendar Sync Mode: Automatic calendar synchronization"
 echo ""
 
 # Check if running as root
@@ -46,24 +48,56 @@ fi
 mkdir -p /var/log/ecal
 chown $CURRENT_USER:$CURRENT_USER /var/log/ecal
 
-# Create systemd service file
-cat > /etc/systemd/system/ecal-image-server.service << EOF
+# Create default config.json if it doesn't exist
+if [ ! -f "$PROJECT_DIR/config.json" ]; then
+    echo "Creating default configuration file..."
+    cat > "$PROJECT_DIR/config.json" << 'CONFIGEOF'
+{
+  "mode": "image_receiver",
+  "calendar_sync": {
+    "calendar_url": "http://localhost:5000",
+    "screenshot_path": "cal.png",
+    "window_size": "1600,1200",
+    "poll_interval": 10,
+    "sleep_hours": 12,
+    "scheduled": false
+  },
+  "image_receiver": {
+    "host": "0.0.0.0",
+    "port": 8000
+  }
+}
+CONFIGEOF
+    chown $CURRENT_USER:$CURRENT_USER "$PROJECT_DIR/config.json"
+    echo "Created config.json with default settings"
+else
+    echo "Config file already exists, keeping existing configuration"
+fi
+
+# Make service_manager.py executable
+chmod +x "$PROJECT_DIR/service_manager.py"
+echo "Made service_manager.py executable"
+
+# Create systemd service file with service manager
+cat > /etc/systemd/system/ecal-display.service << EOF
 [Unit]
-Description=ECAL Image Receiver Server
+Description=ECAL Display Service (Image Receiver / Calendar Sync)
 After=network.target
 Wants=network.target
 
 [Service]
-Type=simple
+Type=forking
 User=$CURRENT_USER
 WorkingDirectory=$PROJECT_DIR
 Environment=PATH=$PROJECT_DIR/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 Environment=PYTHONPATH=$PROJECT_DIR
-ExecStart=$PROJECT_DIR/venv/bin/python3 $PROJECT_DIR/image_receiver_server.py
-Restart=always
+ExecStart=$PROJECT_DIR/venv/bin/python3 $PROJECT_DIR/service_manager.py start
+ExecStop=$PROJECT_DIR/venv/bin/python3 $PROJECT_DIR/service_manager.py stop
+ExecReload=$PROJECT_DIR/venv/bin/python3 $PROJECT_DIR/service_manager.py restart
+Restart=on-failure
 RestartSec=10
-StandardOutput=append:/var/log/ecal/image-server.log
-StandardError=append:/var/log/ecal/image-server.log
+StandardOutput=append:/var/log/ecal/ecal-display.log
+StandardError=append:/var/log/ecal/ecal-display.log
 
 [Install]
 WantedBy=multi-user.target
@@ -72,31 +106,52 @@ EOF
 echo "Created systemd service file"
 
 # Set proper permissions
-chmod 644 /etc/systemd/system/ecal-image-server.service
+chmod 644 /etc/systemd/system/ecal-display.service
 
 # Reload systemd
 systemctl daemon-reload
 
 # Enable the service
-systemctl enable ecal-image-server.service
+systemctl enable ecal-display.service
 
 echo ""
 echo "=== Installation Complete ==="
-echo "Service: ecal-image-server"
+echo "Service: ecal-display"
 echo "Status: Enabled (will start on boot)"
 echo ""
+echo "Current Mode: $(cat $PROJECT_DIR/config.json | grep -o '\"mode\": \"[^\"]*\"' | cut -d'"' -f4)"
+echo ""
+echo "=== Service Management ==="
 echo "To start the service now:"
-echo "  sudo systemctl start ecal-image-server"
+echo "  sudo systemctl start ecal-display"
 echo ""
 echo "To check status:"
-echo "  sudo systemctl status ecal-image-server"
+echo "  sudo systemctl status ecal-display"
 echo ""
 echo "To view logs:"
-echo "  sudo journalctl -u ecal-image-server -f"
-echo "  tail -f /var/log/ecal/image-server.log"
+echo "  sudo journalctl -u ecal-display -f"
+echo "  tail -f /var/log/ecal/ecal-display.log"
 echo ""
-echo "The image server will run on port 8000"
-echo "Logs will be written to: /var/log/ecal/image-server.log"
+echo "=== Mode Management ==="
+echo "Switch between modes using the service manager:"
+echo "  cd $PROJECT_DIR"
+echo "  python3 service_manager.py status          # Check current mode"
+echo "  python3 service_manager.py switch image_receiver"
+echo "  python3 service_manager.py switch calendar_sync"
+echo ""
+echo "Or use the web interface (when in Image Receiver mode):"
+echo "  http://localhost:8000/upload_form"
+echo ""
+echo "=== Configuration ==="
+echo "Edit config.json to customize settings for each mode:"
+echo "  nano $PROJECT_DIR/config.json"
+echo ""
+echo "Default port: 8000 (Image Receiver mode)"
+echo "Logs: /var/log/ecal/ecal-display.log"
+echo ""
+echo "For detailed mode switching guide, see:"
+echo "  $PROJECT_DIR/MODE_SWITCHING_GUIDE.md"
+echo ""
 echo "Make sure your virtual environment is set up with:"
 echo "  python3 -m venv venv"
 echo "  source venv/bin/activate"
