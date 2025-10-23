@@ -27,6 +27,10 @@ def display_image(image_path, zoom_to_fit=False, test_rotation=None, auto_rotate
     Note:
         Auto-rotate-to-fit intelligently rotates images to maximize screen usage by comparing
         the aspect ratios of the image and display, rotating if it improves screen coverage by >5%.
+        Rotation direction is consistent based on orientation:
+        - Portrait images on landscape displays: rotate 270° (counterclockwise)
+        - Landscape images on portrait displays: rotate 90° (clockwise)
+        This ensures images are never displayed upside down.
         When combined with auto_zoom_after_rotation, images are rotated AND zoomed to fill the frame.
     """
     print("13.3inch e-paper (E) Image Display...")
@@ -62,27 +66,48 @@ def display_image(image_path, zoom_to_fit=False, test_rotation=None, auto_rotate
             Himage = Himage.rotate(test_rotation, expand=True)
             print(f"Image size after test rotation: {Himage.size}")
         
-        # Auto-rotate to maximize screen usage
+        # Auto-rotate to maximize screen usage with consistent orientation
         image_was_rotated = False
         if auto_rotate_to_fit:
             img_width, img_height = Himage.size
             display_width, display_height = epd13in3E.EPD_WIDTH, epd13in3E.EPD_HEIGHT
             
+            # Determine orientations
+            img_is_portrait = img_height > img_width
+            display_is_portrait = display_height > display_width
+            
+            print(f"Image orientation: {'Portrait' if img_is_portrait else 'Landscape'} ({img_width}x{img_height})")
+            print(f"Display orientation: {'Portrait' if display_is_portrait else 'Landscape'} ({display_width}x{display_height})")
+            
             # Calculate how much of the screen would be used without rotation
             scale_no_rotation = min(display_width / img_width, display_height / img_height)
             area_no_rotation = (img_width * scale_no_rotation) * (img_height * scale_no_rotation)
             
-            # Calculate how much of the screen would be used with 90° rotation
+            # Calculate how much of the screen would be used with rotation
             scale_with_rotation = min(display_width / img_height, display_height / img_width)
             area_with_rotation = (img_height * scale_with_rotation) * (img_width * scale_with_rotation)
             
-            # Rotate if it increases screen usage by more than 5%
+            # Rotate if orientations don't match and it increases screen usage by more than 5%
             if area_with_rotation > area_no_rotation * 1.05:
-                print(f"Auto-rotating image 90° to maximize screen usage")
+                # Use consistent rotation direction based on orientations:
+                # - Portrait image on landscape display: rotate 270° (counterclockwise)
+                # - Landscape image on portrait display: rotate 90° (clockwise)
+                if img_is_portrait and not display_is_portrait:
+                    rotation_angle = 270  # Counterclockwise for portrait -> landscape
+                    rotation_dir = "counterclockwise"
+                elif not img_is_portrait and display_is_portrait:
+                    rotation_angle = 90   # Clockwise for landscape -> portrait
+                    rotation_dir = "clockwise"
+                else:
+                    # Fallback: use 270° for consistent behavior
+                    rotation_angle = 270
+                    rotation_dir = "counterclockwise"
+                
+                print(f"Auto-rotating image {rotation_angle}° ({rotation_dir}) to maximize screen usage")
                 print(f"  Screen usage without rotation: {area_no_rotation:.0f} pixels²")
                 print(f"  Screen usage with rotation: {area_with_rotation:.0f} pixels²")
                 print(f"  Improvement: {((area_with_rotation / area_no_rotation - 1) * 100):.1f}%")
-                Himage = Himage.rotate(90, expand=True)
+                Himage = Himage.rotate(rotation_angle, expand=True)
                 print(f"  Image size after auto-rotation: {Himage.size}")
                 image_was_rotated = True
                 
