@@ -6,7 +6,7 @@ import subprocess
 import sys
 import gc
 from datetime import datetime
-from PIL import Image, ExifTags
+from PIL import Image
 
 app = Flask(__name__)
 
@@ -41,10 +41,6 @@ def upload_image():
     if file.filename == '':
         return jsonify({'error': 'No selected file'}), 400
     
-    # Get auto-rotate preference
-    auto_rotate = request.form.get('auto_rotate', 'true').lower() == 'true'
-    print(f"[{datetime.now()}] Auto-rotate setting: {auto_rotate}")
-    
     tmp_path = None
     img = None
     
@@ -55,74 +51,38 @@ def upload_image():
             tmp_path = tmp.name
         print(f"[{datetime.now()}] Received file saved to {tmp_path}")
         
-        # Auto-orient the image using Pillow (only if enabled)
-        if auto_rotate:
-            try:
-                # Load image with memory optimization
-                img = Image.open(tmp_path)
-                print(f"[{datetime.now()}] Original image size: {img.size}")
-                
-                # Apply memory optimization
-                img = optimize_image_memory(img)
-                print(f"[{datetime.now()}] Image size after optimization: {img.size}")
-                
-                # Process EXIF orientation more efficiently
-                orientation_value = None
-                try:
-                    exif = img.getexif()
-                    if exif is not None:
-                        # Use direct tag lookup instead of iterating through all tags
-                        orientation_value = exif.get(274, None)  # 274 is the standard orientation tag
-                        if orientation_value is None:
-                            orientation_value = exif.get(0x0112, None)  # Alternative hex format
-                        
-                        print(f"[{datetime.now()}] EXIF orientation value: {orientation_value}")
-                except Exception as e:
-                    print(f"EXIF processing error: {e}")
-                
-                # Apply rotation if needed
-                if orientation_value in [3, 6, 8]:
-                    original_size = img.size
-                    
-                    if orientation_value == 3:
-                        img = img.rotate(180, expand=True)
-                        print(f"[{datetime.now()}] Rotated image 180°")
-                    elif orientation_value == 6:
-                        img = img.rotate(90, expand=True)
-                        print(f"[{datetime.now()}] Rotated image 90°")
-                    elif orientation_value == 8:
-                        img = img.rotate(270, expand=True)
-                        print(f"[{datetime.now()}] Rotated image 270°")
-                    
-                    print(f"[{datetime.now()}] Image size after rotation: {img.size}")
-                    
-                    # Save rotated image with memory optimization
-                    print(f"[{datetime.now()}] Saving rotated image...")
-                    img.save(tmp_path, format='PNG', optimize=True, compress_level=6)
-                    print(f"[{datetime.now()}] Image auto-orientation completed and saved")
-                    
-                    # Clean up the rotated image object
-                    img.close()
-                    img = None
-                    
-                    # Force garbage collection
-                    gc.collect()
-                    
-                else:
-                    print(f"[{datetime.now()}] No rotation needed for orientation {orientation_value}")
-                    # Close image if no rotation needed
-                    img.close()
-                    img = None
-                    
-            except Exception as e:
-                print(f"Error auto-orienting image: {e}")
-                if img:
-                    img.close()
-                    img = None
-                import traceback
-                traceback.print_exc()
-        else:
-            print(f"[{datetime.now()}] Auto-rotation disabled, keeping original orientation")
+        # Apply memory optimization if image is very large
+        try:
+            img = Image.open(tmp_path)
+            print(f"[{datetime.now()}] Original image size: {img.size}")
+            
+            # Apply memory optimization
+            optimized_img = optimize_image_memory(img)
+            
+            # If image was optimized (resized), save it
+            if optimized_img.size != img.size:
+                print(f"[{datetime.now()}] Image size after optimization: {optimized_img.size}")
+                print(f"[{datetime.now()}] Saving optimized image...")
+                optimized_img.save(tmp_path, format='PNG', optimize=True, compress_level=COMPRESSION_QUALITY)
+                print(f"[{datetime.now()}] Image optimization completed and saved")
+            else:
+                print(f"[{datetime.now()}] No optimization needed")
+            
+            # Clean up image objects
+            img.close()
+            optimized_img.close()
+            img = None
+            
+            # Force garbage collection
+            gc.collect()
+            
+        except Exception as e:
+            print(f"Error optimizing image: {e}")
+            if img:
+                img.close()
+                img = None
+            import traceback
+            traceback.print_exc()
         
         # Call the display_image.py script
         print(f"[{datetime.now()}] Running display command: {' '.join([sys.executable, IMAGE_SCRIPT, tmp_path])}")

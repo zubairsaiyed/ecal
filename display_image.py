@@ -13,7 +13,7 @@ import epd13in3E
 import time
 from PIL import Image
 
-def display_image(image_path, zoom_to_fit=False, test_rotation=None):
+def display_image(image_path, zoom_to_fit=False, test_rotation=None, auto_rotate_to_fit=True):
     """
     Display an image on the 13.3inch e-paper display
     
@@ -21,10 +21,11 @@ def display_image(image_path, zoom_to_fit=False, test_rotation=None):
         image_path (str): Path to the image file to display
         zoom_to_fit (bool): If True, scale to fill display (may crop). If False, scale to fit (no cropping).
         test_rotation (int, optional): Test rotation angle (0, 90, 180, 270) to test display orientation
+        auto_rotate_to_fit (bool): If True, automatically rotate image 90° if it maximizes screen usage
     
     Note:
-        This display has a physical orientation offset - it rotates images 90° clockwise by default.
-        When honoring EXIF orientation data, we compensate for this offset to ensure correct display.
+        Auto-rotate-to-fit intelligently rotates images to maximize screen usage by comparing
+        the aspect ratios of the image and display, rotating if it improves screen coverage by >5%.
     """
     print("13.3inch e-paper (E) Image Display...")
     
@@ -53,67 +54,42 @@ def display_image(image_path, zoom_to_fit=False, test_rotation=None):
         print(f"Image size: {Himage.size}")
         print(f"Image info: {Himage.info}")
         
-        # Handle EXIF orientation data (backup handler)
-        # Note: The server should have already rotated the image, but this ensures
-        # the display script also honors EXIF data as a fallback
-        try:
-            from PIL import ExifTags
-            exif = Himage.getexif()
-            if exif is not None:
-                print(f"EXIF data found: {exif is not None}")
-                print(f"EXIF tags: {list(exif.keys())}")
-                
-                # Find orientation tag
-                orientation = None
-                for tag, value in ExifTags.TAGS.items():
-                    if value == 'Orientation':
-                        orientation = tag
-                        break
-                
-                if orientation is not None and orientation in exif:
-                    orientation_value = exif.get(orientation, None)
-                    print(f"EXIF orientation value: {orientation_value}")
-                    
-                    # Apply EXIF rotation with compensation for display's physical orientation
-                    # The display rotates images 90° clockwise by default, so we need to compensate
-                    if orientation_value == 3:
-                        # 180° rotation - no compensation needed (180° is symmetric)
-                        Himage = Himage.rotate(180, expand=True)
-                        print("Applied EXIF rotation: 180° (no compensation needed)")
-                    elif orientation_value == 6:
-                        # 90° clockwise rotation - compensate by rotating 90° counter-clockwise to counter the display's 90° offset
-                        Himage = Himage.rotate(90, expand=True)
-                        print("Applied EXIF rotation: 90° → compensated with 90° counter-clockwise rotation")
-                    elif orientation_value == 8:
-                        # 270° clockwise rotation - compensate by rotating 270° counter-clockwise to counter the display's 90° offset
-                        Himage = Himage.rotate(270, expand=True)
-                        print("Applied EXIF rotation: 270° → compensated with 270° counter-clockwise rotation")
-                    else:
-                        print(f"No rotation needed for orientation {orientation_value}")
-                    
-                    print(f"Image size after EXIF rotation: {Himage.size}")
-                else:
-                    print("No EXIF orientation data found")
-            else:
-                print("No EXIF data found")
-        except Exception as e:
-            print(f"Error processing EXIF data: {e}")
-            import traceback
-            traceback.print_exc()
-        
         # Test rotation override (for debugging display orientation)
         if test_rotation is not None:
             print(f"Applying test rotation: {test_rotation}°")
             Himage = Himage.rotate(test_rotation, expand=True)
             print(f"Image size after test rotation: {Himage.size}")
         
+        # Auto-rotate to maximize screen usage
+        if auto_rotate_to_fit:
+            img_width, img_height = Himage.size
+            display_width, display_height = epd13in3E.EPD_WIDTH, epd13in3E.EPD_HEIGHT
+            
+            # Calculate how much of the screen would be used without rotation
+            scale_no_rotation = min(display_width / img_width, display_height / img_height)
+            area_no_rotation = (img_width * scale_no_rotation) * (img_height * scale_no_rotation)
+            
+            # Calculate how much of the screen would be used with 90° rotation
+            scale_with_rotation = min(display_width / img_height, display_height / img_width)
+            area_with_rotation = (img_height * scale_with_rotation) * (img_width * scale_with_rotation)
+            
+            # Rotate if it increases screen usage by more than 5%
+            if area_with_rotation > area_no_rotation * 1.05:
+                print(f"Auto-rotating image 90° to maximize screen usage")
+                print(f"  Screen usage without rotation: {area_no_rotation:.0f} pixels²")
+                print(f"  Screen usage with rotation: {area_with_rotation:.0f} pixels²")
+                print(f"  Improvement: {((area_with_rotation / area_no_rotation - 1) * 100):.1f}%")
+                Himage = Himage.rotate(90, expand=True)
+                print(f"  Image size after auto-rotation: {Himage.size}")
+            else:
+                print(f"No auto-rotation needed (current orientation maximizes screen usage)")
+        
         # Resize image to fit the display if necessary
         if Himage.size != (epd13in3E.EPD_WIDTH, epd13in3E.EPD_HEIGHT):
             print(f"Original image size: {Himage.size}")
             print(f"Target display size: ({epd13in3E.EPD_WIDTH}, {epd13in3E.EPD_HEIGHT})")
             
-            # Honor EXIF orientation - don't do display optimization rotation
-            # Just scale the image to fit while maintaining aspect ratio
+            # Scale the image to fit while maintaining aspect ratio
             original_width, original_height = Himage.size
             display_width, display_height = epd13in3E.EPD_WIDTH, epd13in3E.EPD_HEIGHT
             
@@ -182,9 +158,12 @@ def main():
                        help='Scale to fill display (may crop image). Default is to fit without cropping.')
     parser.add_argument('--test-rotation', type=int, choices=[0, 90, 180, 270],
                        help='Test rotation: apply specific rotation angle to test display orientation')
+    parser.add_argument('--no-auto-rotate', action='store_true',
+                       help='Disable automatic rotation to maximize screen usage')
     args = parser.parse_args()
     
-    success = display_image(args.image_path, args.zoom_to_fit, args.test_rotation)
+    success = display_image(args.image_path, args.zoom_to_fit, args.test_rotation, 
+                           auto_rotate_to_fit=not args.no_auto_rotate)
     if success:
         print("Image displayed successfully!")
     else:

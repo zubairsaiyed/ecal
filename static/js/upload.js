@@ -81,11 +81,6 @@ document.addEventListener('DOMContentLoaded', function() {
             const formData = new FormData();
             formData.append('file', fileInput.files[0]);
             
-            // Add auto-rotate preference
-            const autoRotate = document.getElementById('autoRotate').checked;
-            formData.append('auto_rotate', autoRotate);
-            console.log('Auto-rotate setting:', autoRotate);
-            
             // Show loading
             loading.style.display = 'block';
             status.style.display = 'none';

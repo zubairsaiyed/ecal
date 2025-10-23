@@ -81,65 +81,6 @@ body {
     box-shadow: 0 5px 15px rgba(79, 172, 254, 0.2);
 }
 
-.rotation-option {
-    margin: 15px 0;
-    text-align: center;
-}
-
-.checkbox-label {
-    display: inline-flex;
-    align-items: center;
-    cursor: pointer;
-    font-size: 14px;
-    color: #555;
-    user-select: none;
-}
-
-.checkbox-label input[type="checkbox"] {
-    position: absolute;
-    opacity: 0;
-    cursor: pointer;
-    height: 0;
-    width: 0;
-}
-
-.checkmark {
-    height: 18px;
-    width: 18px;
-    background-color: #f8f9fa;
-    border: 2px solid #ddd;
-    border-radius: 4px;
-    margin-right: 10px;
-    position: relative;
-    transition: all 0.2s ease;
-}
-
-.checkbox-label:hover .checkmark {
-    border-color: #4facfe;
-    background-color: #f0f8ff;
-}
-
-.checkbox-label input:checked ~ .checkmark {
-    background-color: #4facfe;
-    border-color: #4facfe;
-}
-
-.checkbox-label input:checked ~ .checkmark:after {
-    content: '';
-    position: absolute;
-    left: 5px;
-    top: 2px;
-    width: 4px;
-    height: 8px;
-    border: solid white;
-    border-width: 0 2px 2px 0;
-    transform: rotate(45deg);
-}
-
-.label-text {
-    font-weight: 500;
-}
-
 .file-input:active {
     transform: translateY(0);
     box-shadow: 0 2px 8px rgba(79, 172, 254, 0.3);
