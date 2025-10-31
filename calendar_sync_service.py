@@ -67,24 +67,44 @@ def download_image(image_url, local_path, status_endpoint=None):
         update_status(status_endpoint, fetching=False, error=error_msg)
         return False
 
-def upload_image_to_endpoint(image_path, endpoint_url, status_endpoint=None):
+def upload_image_to_endpoint(image_path, endpoint_url, status_endpoint=None, max_retries=3, retry_delay=2):
+    """Upload image with retry logic for connection refused errors"""
     log_info(f"[{datetime.now()}] Uploading {image_path} to endpoint {endpoint_url}...")
     update_status(status_endpoint, fetching=False, uploading=True)
-    try:
-        with open(image_path, 'rb') as img_file:
-            files = {'file': (os.path.basename(image_path), img_file, 'image/png')}
-            response = requests.post(endpoint_url, files=files)
-        if response.status_code == 200:
-            log_info(f"[{datetime.now()}] Image uploaded successfully.")
-            update_status(status_endpoint, uploading=False, error=None)  # Clear any previous errors
-        else:
-            error_msg = f"Failed to upload image: HTTP {response.status_code} - {response.text[:100]}"
+    
+    for attempt in range(max_retries):
+        try:
+            with open(image_path, 'rb') as img_file:
+                files = {'file': (os.path.basename(image_path), img_file, 'image/png')}
+                response = requests.post(endpoint_url, files=files, timeout=30)
+            if response.status_code == 200:
+                log_info(f"[{datetime.now()}] Image uploaded successfully.")
+                update_status(status_endpoint, uploading=False, error=None)  # Clear any previous errors
+                return True
+            else:
+                error_msg = f"Failed to upload image: HTTP {response.status_code} - {response.text[:100]}"
+                log_info(f"[{datetime.now()}] ERROR: {error_msg}")
+                update_status(status_endpoint, uploading=False, error=error_msg)
+                return False
+        except requests.exceptions.ConnectionError as e:
+            if attempt < max_retries - 1:
+                wait_time = retry_delay * (attempt + 1)  # Exponential backoff: 2s, 4s, 6s
+                log_info(f"[{datetime.now()}] Connection refused, retrying in {wait_time}s... (attempt {attempt + 1}/{max_retries})")
+                time.sleep(wait_time)
+                continue
+            else:
+                error_msg = f"Error uploading image: Connection refused after {max_retries} attempts. Is image_receiver_server.py running?"
+                log_info(f"[{datetime.now()}] ERROR: {error_msg}")
+                log_info(f"[{datetime.now()}] Full error: {e}")
+                update_status(status_endpoint, uploading=False, error=error_msg)
+                return False
+        except Exception as e:
+            error_msg = f"Error uploading image: {e}"
             log_info(f"[{datetime.now()}] ERROR: {error_msg}")
             update_status(status_endpoint, uploading=False, error=error_msg)
-    except Exception as e:
-        error_msg = f"Error uploading image: {e}"
-        log_info(f"[{datetime.now()}] ERROR: {error_msg}")
-        update_status(status_endpoint, uploading=False, error=error_msg)
+            return False
+    
+    return False
 
 def refresh_display(image_url, endpoint_url, temp_dir, status_endpoint=None):
     """Download image and upload to display endpoint"""

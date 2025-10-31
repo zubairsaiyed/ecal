@@ -20,7 +20,15 @@ cd /home/zuperzz/code/ecal
 python3 service_manager.py start
 ```
 
-The service will start in the mode specified in `config.json` (default: `image_receiver`).
+Or using systemd:
+```bash
+sudo systemctl start ecal-display
+```
+
+The service will start `image_receiver_server.py`, which will:
+- Always run the Flask server on port 8000
+- Automatically start the calendar sync subprocess if mode is `calendar_sync`
+- Default mode is `image_receiver`
 
 ### View Service Status
 
@@ -65,7 +73,7 @@ python3 service_manager.py switch image_receiver
 2. Look for the mode selector at the top of the page
 3. Click "🔄 Switch to Calendar Sync" (or "Switch to Image Receiver")
 4. Confirm the switch
-5. The service will automatically restart in the new mode
+5. The mode will switch without restarting the service (calendar sync subprocess will start/stop automatically)
 
 ---
 
@@ -74,6 +82,10 @@ python3 service_manager.py switch image_receiver
 ### 📸 Image Receiver Mode
 
 **Purpose:** Accept manual image uploads through the web interface
+
+**What runs:**
+- `image_receiver_server.py` (Flask server on port 8000)
+- No calendar sync subprocess
 
 **Features:**
 - Web-based upload form at `http://localhost:8000/upload_form`
@@ -108,29 +120,26 @@ python3 service_manager.py switch image_receiver
 **Features:**
 - Server-side calendar rendering (calendar_server.py generates screenshots)
 - Change detection via hash polling (only updates when calendar changes)
-- Configurable polling interval
-- Scheduled mode for periodic updates
+- Fixed 5-second polling interval for optimal responsiveness
 - Automatic upload to display
 - Separation of concerns: calendar server handles rendering, client handles sync
+- Manual sync trigger via web interface
+- Real-time status display in web UI
 
 **Configuration** (`config.json`):
 ```json
 {
   "mode": "calendar_sync",
   "calendar_sync": {
-    "calendar_url": "http://localhost:5000",
-    "poll_interval": 10,
-    "sleep_hours": 12,
-    "scheduled": false
+    "calendar_url": "http://localhost:5000"
   }
 }
 ```
 
 **Configuration Options:**
 - `calendar_url`: URL of the calendar server (should point to calendar_server.py)
-- `poll_interval`: How often to check for changes (seconds, dev mode)
-- `scheduled`: Use scheduled mode instead of continuous polling
-- `sleep_hours`: Interval between updates in scheduled mode (hours)
+
+**Note:** The polling interval is fixed at 5 seconds. The calendar sync service automatically starts when switching to `calendar_sync` mode.
 
 **When to use:**
 - Family calendar display
@@ -148,10 +157,7 @@ The configuration is stored in `config.json`:
 {
   "mode": "image_receiver",
   "calendar_sync": {
-    "calendar_url": "http://localhost:5000",
-    "poll_interval": 10,
-    "sleep_hours": 12,
-    "scheduled": false
+    "calendar_url": "http://localhost:5000"
   },
   "image_receiver": {
     "host": "0.0.0.0",
@@ -175,8 +181,7 @@ curl -X POST http://localhost:8000/mode/config \
   -H "Content-Type: application/json" \
   -d '{
     "mode_type": "calendar_sync",
-    "calendar_url": "http://example.com/calendar",
-    "poll_interval": 30
+    "calendar_url": "http://example.com/calendar"
   }'
 ```
 
@@ -291,9 +296,11 @@ python3 service_manager.py restart
 
 ### Calendar sync not updating
 - Verify calendar server is running: `curl <calendar_url>/image/hash`
-- Check poll interval isn't too long
-- Look at service logs for errors
-- Ensure calendar_server.py is running and accessible at the configured URL
+- Check that `image_receiver_server.py` is running (the calendar sync subprocess is managed by it)
+- Verify the mode is set to `calendar_sync` in `config.json`
+- Look at service logs for errors: `tail -f /var/log/ecal/ecal-display.log`
+- Ensure `calendar_server.py` is running and accessible at the configured URL
+- Check calendar sync status in the web interface: `http://localhost:8000/upload_form`
 
 ---
 
@@ -301,15 +308,13 @@ python3 service_manager.py restart
 
 ### Daily Calendar Display
 
-Set up automatic calendar updates every 12 hours:
+Set up automatic calendar updates (polls every 5 seconds):
 
 ```json
 {
   "mode": "calendar_sync",
   "calendar_sync": {
-    "calendar_url": "http://localhost:5000",
-    "scheduled": true,
-    "sleep_hours": 12
+    "calendar_url": "http://localhost:5000"
   }
 }
 ```
@@ -317,6 +322,8 @@ Set up automatic calendar updates every 12 hours:
 ```bash
 python3 service_manager.py switch calendar_sync
 ```
+
+Or switch via web interface at `http://localhost:8000/upload_form`
 
 ### Manual Photo Display
 
@@ -328,20 +335,20 @@ python3 service_manager.py switch image_receiver
 
 Then open `http://localhost:8000/upload_form` to upload images.
 
-### Development Mode
+### Calendar Sync Mode
 
-Test calendar changes with fast polling:
+The calendar sync service automatically polls every 5 seconds:
 
 ```json
 {
   "mode": "calendar_sync",
   "calendar_sync": {
-    "calendar_url": "http://localhost:5000",
-    "poll_interval": 5,
-    "scheduled": false
+    "calendar_url": "http://localhost:5000"
   }
 }
 ```
+
+The polling interval is fixed at 5 seconds for optimal responsiveness.
 
 ---
 

@@ -7,6 +7,7 @@ import sys
 import gc
 import json
 import threading
+import time
 from datetime import datetime
 from PIL import Image
 
@@ -95,6 +96,15 @@ def start_calendar_sync_process():
         
         log_info(f"[{datetime.now()}] Starting calendar sync process...")
         log_info(f"[{datetime.now()}] Command: {' '.join(cmd)}")
+        
+        # Verify the upload endpoint is accessible before starting the sync service
+        try:
+            import requests
+            test_response = requests.get(endpoint_url.replace('/upload', '/'), timeout=2)
+            log_info(f"[{datetime.now()}] Verified upload endpoint is accessible")
+        except Exception as e:
+            log_info(f"[{datetime.now()}] WARNING: Could not verify upload endpoint: {e}")
+            log_info(f"[{datetime.now()}] Continuing anyway - sync service will retry connection...")
         
         try:
             _calendar_sync_process = subprocess.Popen(
@@ -666,4 +676,20 @@ def mode_config():
     return jsonify(config)
 
 if __name__ == '__main__':
+    # Check mode on startup and start calendar sync if needed
+    config = load_config()
+    current_mode = config.get('mode', 'image_receiver')
+    log_info(f"[{datetime.now()}] Starting image_receiver_server.py in {current_mode} mode...")
+    
+    if current_mode == 'calendar_sync':
+        # Wait a moment for Flask to start, then start calendar sync process
+        import threading
+        def start_sync_delayed():
+            time.sleep(2)  # Give Flask time to start
+            log_info(f"[{datetime.now()}] Auto-starting calendar sync process (mode is calendar_sync)...")
+            start_calendar_sync_process()
+        
+        thread = threading.Thread(target=start_sync_delayed, daemon=True)
+        thread.start()
+    
     app.run(host='0.0.0.0', port=8000)

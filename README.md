@@ -74,20 +74,25 @@ This system is designed for deployment across two Raspberry Pis:
 
 ### Display Pi (Low Memory)
 - **Purpose**: Connected to e-paper display, runs lightweight image server
-- **Applications**: `image_receiver_server.py` only
-- **Network**: Receives image uploads from Compute Pi
+- **Applications**: `image_receiver_server.py` (manages calendar sync subprocess when in calendar_sync mode)
+- **Network**: Receives image uploads from Compute Pi or users
 - **Hardware**: E-paper display, minimal RAM requirements
+- **Service**: Single `ecal-display` systemd service
 
 ### Compute Pi (Higher Memory)
 - **Purpose**: Calendar processing and web interface
-- **Applications**: `calendar_server.py`, `calendar_sync_service.py`
-- **Network**: Sends screenshots to Display Pi
+- **Applications**: `calendar_server.py` only (generates calendar screenshots)
+- **Network**: Hosts calendar server that Display Pi polls
 - **Hardware**: More RAM for calendar processing and web serving
+- **Note**: The calendar sync service runs on the Display Pi, not the Compute Pi
 
 ### Network Configuration
-- **Display Pi**: Runs image server on port 8000
-- **Compute Pi**: Runs calendar server on port 5000
-- **Communication**: Compute Pi uploads screenshots to Display Pi's image server
+- **Display Pi**: Runs `image_receiver_server.py` on port 8000
+  - In `calendar_sync` mode: Automatically runs `calendar_sync_service.py` as a subprocess
+  - In `image_receiver` mode: Accepts manual image uploads via web interface
+- **Compute Pi**: Runs `calendar_server.py` on port 5000
+  - Provides `/image` and `/image/hash` endpoints
+- **Communication**: Display Pi's calendar sync subprocess polls Compute Pi and uploads screenshots to itself (localhost:8000/upload)
 
 ### Automatic Startup Installation
 Use the provided installation scripts to set up automatic startup:

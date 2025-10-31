@@ -53,25 +53,29 @@ python3 calendar_sync_service.py \
 ### **Display Client** (Raspberry Pi with E-paper)
 
 **What runs here:**
-- `image_receiver_server.py` - Web server accepting image uploads
+- `image_receiver_server.py` - Flask web server (always running)
+  - Accepts image uploads via `/upload` endpoint
+  - Manages mode switching (image_receiver or calendar_sync)
+  - In `calendar_sync` mode: Automatically starts `calendar_sync_service.py` as a subprocess
+  - In `image_receiver` mode: Just runs the Flask server
 - `display_image.py` - E-paper display driver
 - Auto-rotation and image optimization
 
 **Resources:**
-- Minimal CPU/memory usage
-- Only displays images, doesn't generate them
-- Always in **image_receiver mode ONLY**
+- Minimal CPU/memory usage when in image_receiver mode
+- In calendar_sync mode: Additional subprocess polls the calendar server
+- Single systemd service (`ecal-display`) manages everything
 
 **Installation:**
 ```bash
 cd /home/zuperzz/code/ecal
 sudo ./scripts/install_display_pi.sh
 
-# The service runs image_receiver mode by default
+# Start the service (always starts image_receiver_server.py)
 sudo systemctl start ecal-display
 ```
 
-**DO NOT run calendar sync on the display client!**
+**Note:** The calendar sync service runs as a subprocess managed by `image_receiver_server.py`, not as a separate systemd service.
 
 ---
 
@@ -84,12 +88,11 @@ User Browser → Upload Form (Display Client:8000) → Image Receiver → E-pape
 
 ### Calendar Sync (Automated)
 ```
-1. Server: Calendar Web App generates calendar HTML
-2. Server: calendar_server.py generates screenshot via /image endpoint
-3. Server: Calendar Sync Service polls /image/hash for changes
-4. Server: When hash changes, downloads image from /image endpoint
-5. Server: Uploads screenshot to Display Client:8000/upload
-6. Display Client: Receives image, optimizes, displays on e-paper
+1. Compute Pi: calendar_server.py generates calendar HTML and screenshot via /image endpoint
+2. Display Pi: calendar_sync_service.py (subprocess) polls Compute Pi's /image/hash for changes
+3. Display Pi: When hash changes, downloads image from Compute Pi's /image endpoint
+4. Display Pi: calendar_sync_service.py uploads screenshot to localhost:8000/upload (itself)
+5. Display Pi: image_receiver_server.py receives the upload, optimizes, displays on e-paper
 ```
 
 ---

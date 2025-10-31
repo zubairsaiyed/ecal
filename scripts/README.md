@@ -47,17 +47,17 @@ sudo journalctl -u ecal-display -f
 
 ## `install_compute_pi.sh`
 
-**Purpose:** Installs the calendar server and sync service on a compute/server machine.
+**Purpose:** Installs the calendar server on a compute/server machine.
 
 **What it does:**
-- Installs chromium-browser (used by calendar_server.py for rendering)
+- Installs chromium-browser (used by calendar_server.py for rendering screenshots)
 - Creates log directory at `/var/log/ecal`
-- Prompts for Display Pi IP/hostname and configuration
-- Creates `calendar_sync_config.env` with settings
-- Installs two systemd services:
+- Prompts for calendar server port
+- Installs systemd service:
   - `ecal-calendar-server.service` - Calendar web application with /image endpoint
-  - `ecal-calendar-sync.service` - Polls server for changes and uploads screenshots
 - Enables automatic startup on boot
+
+**Note:** The calendar sync service runs on the Display Pi (as a subprocess), not on the Compute Pi.
 
 **Usage:**
 ```bash
@@ -65,39 +65,30 @@ sudo ./scripts/install_compute_pi.sh
 ```
 
 **Interactive Prompts:**
-- Display Pi IP address/hostname (default: `raspberrypi.local`)
-- Display Pi port (default: `8000`)
 - Calendar server port (default: `5000`)
-- Update mode (dev or scheduled)
-- Poll interval (dev mode) or sleep hours (scheduled mode)
 
 **Requirements:**
 - Must be run with sudo
 - Virtual environment should be set up
-- Display Pi should be accessible on the network
+- Chromium-browser will be installed automatically
 
 **After installation:**
 ```bash
-# Start both services
+# Start the calendar server
 sudo systemctl start ecal-calendar-server
-sudo systemctl start ecal-calendar-sync
 
 # Check status
 sudo systemctl status ecal-calendar-server
-sudo systemctl status ecal-calendar-sync
 
 # View logs
-sudo journalctl -u ecal-calendar-sync -f
+sudo journalctl -u ecal-calendar-server -f
+tail -f /var/log/ecal/calendar-server.log
 ```
 
-**Configuration file:**
-Settings are saved to `calendar_sync_config.env` for reference. To change settings:
-1. Edit the systemd service file directly or
-2. Reconfigure and reinstall
-
-**Test connectivity to Display Pi:**
+**Test the calendar server:**
 ```bash
-curl http://DISPLAY_PI_IP:8000
+curl http://localhost:5000
+curl http://localhost:5000/image/hash
 ```
 
 ---

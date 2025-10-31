@@ -177,13 +177,9 @@ def start_service():
     mode = get_current_mode()
     print(f"Starting service in '{mode}' mode...")
     
-    if mode == 'image_receiver':
-        start_image_receiver()
-    elif mode == 'calendar_sync':
-        start_calendar_sync()
-    else:
-        print(f"Error: Unknown mode '{mode}'")
-        sys.exit(1)
+    # Always start image_receiver_server.py - it manages calendar sync as a subprocess
+    # when in calendar_sync mode
+    start_image_receiver()
 
 def restart_service():
     """Restart the service"""

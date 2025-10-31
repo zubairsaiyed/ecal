@@ -49,50 +49,60 @@ sudo systemctl start ecal-display
 
 ### Machine 2: Server (Desktop/Compute Pi)
 
-**What it does:** Runs calendar server with screenshot generation; sync service polls and uploads to display
+**What it does:** Runs calendar server with screenshot generation endpoint
 
 **Setup:**
 ```bash
 cd /path/to/ecal  # Copy the ecal folder to your server
 
 # Install dependencies
-pip install requests pillow  # Lightweight, no display drivers needed
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
 
 # Install chromium for screenshots
 sudo apt-get install chromium-browser
 ```
 
-**Start calendar server:**
+**Install as service:**
 ```bash
-# Terminal 1: Start calendar server (generates screenshots via /image endpoint)
-python3 calendar_server.py
+sudo ./scripts/install_compute_pi.sh
+sudo systemctl start ecal-calendar-server
 ```
-
-**Run calendar sync:**
-```bash
-# Terminal 2: Start sync service (polls server and uploads to display)
-./run_calendar_sync_server.sh
-```
-
-This will:
-1. Ask for your calendar server URL (e.g., `http://localhost:5000`)
-2. Ask for display client IP (e.g., `192.168.1.100`)
-3. Ask for polling interval
-4. Start syncing!
 
 **Or run manually:**
 ```bash
-# Calendar server (in one terminal)
 python3 calendar_server.py
-
-# Sync service (in another terminal)
-python3 calendar_sync_service.py \
-  --calendar-url http://localhost:5000 \
-  --endpoint-url http://192.168.1.100:8000/upload \
-  --poll-interval 10
 ```
 
+**Note:** The calendar sync service runs on the Display Pi (as a subprocess), not on the Compute Pi. The Compute Pi only runs the calendar server.
+
 ---
+
+## 🖥️ Calendar Sync Setup
+
+To enable calendar sync on the Display Pi:
+
+1. **Configure calendar server URL in `config.json`:**
+   ```json
+   {
+     "mode": "calendar_sync",
+     "calendar_sync": {
+       "calendar_url": "http://COMPUTE_PI_IP:5000"
+     }
+   }
+   ```
+
+2. **Switch to calendar sync mode:**
+   - Via web interface: `http://DISPLAY_PI_IP:8000/upload_form` → Switch mode
+   - Or via API: `curl -X POST http://localhost:8000/mode/switch -H "Content-Type: application/json" -d '{"mode": "calendar_sync"}'`
+
+3. **The image_receiver_server.py will automatically:**
+   - Start the calendar sync subprocess
+   - Poll the calendar server every 5 seconds
+   - Download and display calendar updates
+
+**Note:** Make sure `calendar_server.py` is running on the Compute Pi first!
 
 ## 🖥️ One-Machine Setup (Testing Only)
 
@@ -143,18 +153,22 @@ sudo systemctl start ecal-display
 │                  │                    │                  │
 │  Calendar Server │                    │  Image Receiver  │
 │  (Port 5000)     │                    │  (Port 8000)     │
-│  /image endpoint │                    │                  │
-│  (Chromium)      │                    │                  │
+│  /image endpoint │◄──── Polls ────────┼─ calendar_sync   │
+│  (Chromium)      │   every 5s         │   (subprocess)   │
 │                  │                    │                  │
-│  Calendar Sync ──┼─── Polls Server ────┼─> E-paper Display│
-│  Service         │   Downloads/Uploads│                  │
-│  (No Chromium)   │                    │                  │
+│                  │                    │  Uploads to ────►│
+│                  │                    │  localhost:8000  │
+│                  │                    │                  │
+│                  │                    │  E-paper Display│
 │                  │                    │                  │
 └──────────────────┘                    └──────────────────┘
   Heavy Resources                        Light Resources
 ```
 
-**Key Point:** Calendar sync runs on SERVER, not on display client!
+**Key Points:**
+- Calendar sync subprocess runs on Display Pi (managed by `image_receiver_server.py`)
+- Display Pi polls Compute Pi for calendar updates every 5 seconds
+- Single `ecal-display` systemd service manages everything on Display Pi
 
 ---
 
