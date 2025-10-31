@@ -127,11 +127,25 @@ def start_calendar_sync():
     """Start the calendar sync service"""
     config = load_config()
     sync_config = config.get('calendar_sync', {})
+    receiver_config = config.get('image_receiver', {})
     
     script_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'calendar_sync_service.py')
     
+    # Determine endpoint URL from image_receiver config (for local uploads)
+    receiver_host = receiver_config.get('host', '0.0.0.0')
+    receiver_port = receiver_config.get('port', 8000)
+    
+    # If host is 0.0.0.0, use localhost for the endpoint URL
+    if receiver_host == '0.0.0.0':
+        endpoint_host = 'localhost'
+    else:
+        endpoint_host = receiver_host
+    
+    endpoint_url = f"http://{endpoint_host}:{receiver_port}/upload"
+    
     print("Starting Calendar Sync Service...")
     print(f"  Calendar URL: {sync_config.get('calendar_url', 'http://localhost:5000')}")
+    print(f"  Endpoint URL: {endpoint_url}")
     print(f"  Poll Interval: {sync_config.get('poll_interval', 10)}s")
     print(f"  Scheduled Mode: {sync_config.get('scheduled', False)}")
     
@@ -145,12 +159,14 @@ def start_calendar_sync():
         cmd.extend(['--poll-interval', str(sync_config.get('poll_interval', 10))])
     
     cmd.extend(['--calendar-url', sync_config.get('calendar_url', 'http://localhost:5000')])
+    cmd.extend(['--endpoint-url', endpoint_url])
     
-    # Start the calendar sync service
+    # Start the calendar sync service with output visible (not piped)
+    # This allows us to see the immediate fetch logs
     process = subprocess.Popen(
         cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        stdout=None,  # Don't pipe - let stdout go to parent's stdout
+        stderr=None,  # Don't pipe - let stderr go to parent's stderr
         start_new_session=True
     )
     

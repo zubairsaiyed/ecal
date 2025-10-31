@@ -7,6 +7,12 @@ import sys
 import argparse
 import tempfile
 
+# Helper function to log to stderr (which is typically visible in service logs)
+def log_info(message):
+    """Log to stderr for visibility in service logs"""
+    print(message, file=sys.stderr)
+    sys.stderr.flush()
+
 # Configuration
 CALENDAR_URL = "http://localhost:5000"
 IMAGE_ENDPOINT = f"{CALENDAR_URL}/image"
@@ -107,9 +113,13 @@ def main():
     
     try:
         # Always do an immediate refresh when starting calendar sync mode
-        print(f"[{datetime.now()}] Starting calendar sync - fetching latest image immediately...")
+        log_info(f"[{datetime.now()}] ===== STARTING CALENDAR SYNC MODE =====")
+        log_info(f"[{datetime.now()}] Calendar URL: {calendar_url}")
+        log_info(f"[{datetime.now()}] Image endpoint: {image_endpoint}")
+        log_info(f"[{datetime.now()}] Upload endpoint: {endpoint_url}")
+        log_info(f"[{datetime.now()}] Fetching latest calendar image immediately...")
         refresh_display(image_endpoint, endpoint_url, temp_dir)
-        print(f"[{datetime.now()}] Initial image fetched and displayed")
+        log_info(f"[{datetime.now()}] ===== INITIAL IMAGE FETCHED AND DISPLAYED =====")
         
         if args.scheduled:
             print(f"[SCHEDULED MODE] Running with {sleep_hours}-hour intervals...")
