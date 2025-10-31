@@ -8,6 +8,7 @@ settings.json
 .env
 .env.local
 .env.production
+calendar_sync_config.env
 
 # Python
 __pycache__/

@@ -68,6 +68,37 @@ def upload_image():
     if file.filename == '':
         return jsonify({'error': 'No selected file'}), 400
     
+    # Check current mode and switch to image_receiver if in calendar_sync mode
+    config = load_config()
+    current_mode = config.get('mode', 'image_receiver')
+    mode_switched = False
+    
+    if current_mode == 'calendar_sync':
+        print(f"[{datetime.now()}] Upload received while in calendar_sync mode - switching to image_receiver mode...")
+        try:
+            # Switch to image_receiver mode using service manager
+            result = subprocess.run(
+                [sys.executable, SERVICE_MANAGER, 'set-mode', 'image_receiver'],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            if result.returncode == 0:
+                mode_switched = True
+                print(f"[{datetime.now()}] Successfully switched to image_receiver mode")
+                # Restart service to apply the mode change
+                subprocess.run(
+                    [sys.executable, SERVICE_MANAGER, 'restart'],
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                print(f"[{datetime.now()}] Service restarted in image_receiver mode")
+            else:
+                print(f"[{datetime.now()}] Warning: Failed to switch mode: {result.stderr}")
+        except Exception as e:
+            print(f"[{datetime.now()}] Warning: Error switching mode: {e}")
+    
     # Get display options
     auto_rotate = request.form.get('auto_rotate', 'true').lower() == 'true'
     auto_zoom = request.form.get('auto_zoom', 'true').lower() == 'true'
@@ -139,7 +170,12 @@ def upload_image():
         # Final garbage collection
         gc.collect()
         
-        return jsonify({'status': 'success'}), 200
+        response_data = {'status': 'success'}
+        if mode_switched:
+            response_data['message'] = 'Image uploaded successfully. Switched to image_receiver mode.'
+            response_data['mode_switched'] = True
+        
+        return jsonify(response_data), 200
         
     except Exception as e:
         print(f"Error processing file: {e}")

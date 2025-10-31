@@ -106,21 +106,24 @@ def main():
     print(f"Using temp directory: {temp_dir}")
     
     try:
+        # Always do an immediate refresh when starting calendar sync mode
+        print(f"[{datetime.now()}] Starting calendar sync - fetching latest image immediately...")
+        refresh_display(image_endpoint, endpoint_url, temp_dir)
+        print(f"[{datetime.now()}] Initial image fetched and displayed")
+        
         if args.scheduled:
             print(f"[SCHEDULED MODE] Running with {sleep_hours}-hour intervals...")
             while True:
-                refresh_display(image_endpoint, endpoint_url, temp_dir)
                 print(f"[{datetime.now()}] Sleeping for {sleep_hours} hours...")
                 time.sleep(sleep_hours * 3600)
+                refresh_display(image_endpoint, endpoint_url, temp_dir)
         else:
             # Default: DEV MODE
             poll_interval = args.poll_interval
             print(f"[DEV MODE] Watching for calendar changes with {poll_interval}-second polling...")
             
-            # Initial refresh
+            # Get initial hash after the refresh
             last_hash = get_image_hash(hash_endpoint)
-            if last_hash:
-                refresh_display(image_endpoint, endpoint_url, temp_dir)
             
             while True:
                 time.sleep(poll_interval)
