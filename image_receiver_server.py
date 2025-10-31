@@ -73,8 +73,11 @@ def upload_image():
     current_mode = config.get('mode', 'image_receiver')
     mode_switched = False
     
+    print(f"[{datetime.now()}] Upload request received. Current mode: {current_mode}")
+    
     if current_mode == 'calendar_sync':
-        print(f"[{datetime.now()}] Upload received while in calendar_sync mode - switching to image_receiver mode...")
+        print(f"[{datetime.now()}] ===== MODE SWITCH: Upload detected while in calendar_sync mode ======")
+        print(f"[{datetime.now()}] Switching to image_receiver mode...")
         try:
             # Switch to image_receiver mode using service manager
             result = subprocess.run(
@@ -83,21 +86,60 @@ def upload_image():
                 text=True,
                 timeout=5
             )
+            
+            # Log the full output
+            if result.stdout:
+                print(f"[{datetime.now()}] set-mode stdout: {result.stdout}")
+            if result.stderr:
+                print(f"[{datetime.now()}] set-mode stderr: {result.stderr}")
+            
             if result.returncode == 0:
-                mode_switched = True
-                print(f"[{datetime.now()}] Successfully switched to image_receiver mode")
-                # Restart service to apply the mode change
-                subprocess.run(
-                    [sys.executable, SERVICE_MANAGER, 'restart'],
-                    capture_output=True,
-                    text=True,
-                    timeout=10
-                )
-                print(f"[{datetime.now()}] Service restarted in image_receiver mode")
+                # Verify the mode was actually changed
+                new_config = load_config()
+                new_mode = new_config.get('mode', 'unknown')
+                print(f"[{datetime.now()}] Mode changed from calendar_sync to {new_mode}")
+                
+                if new_mode == 'image_receiver':
+                    mode_switched = True
+                    print(f"[{datetime.now()}] ===== MODE SWITCH SUCCESSFUL ======")
+                    
+                    # Restart service to apply the mode change
+                    print(f"[{datetime.now()}] Restarting service to apply mode change...")
+                    restart_result = subprocess.run(
+                        [sys.executable, SERVICE_MANAGER, 'restart'],
+                        capture_output=True,
+                        text=True,
+                        timeout=10
+                    )
+                    
+                    if restart_result.stdout:
+                        print(f"[{datetime.now()}] restart stdout: {restart_result.stdout}")
+                    if restart_result.stderr:
+                        print(f"[{datetime.now()}] restart stderr: {restart_result.stderr}")
+                    
+                    if restart_result.returncode == 0:
+                        print(f"[{datetime.now()}] ===== SERVICE RESTARTED IN IMAGE_RECEIVER MODE ======")
+                    else:
+                        print(f"[{datetime.now()}] Warning: Service restart returned non-zero exit code: {restart_result.returncode}")
+                else:
+                    print(f"[{datetime.now()}] ERROR: Mode verification failed. Expected 'image_receiver', got '{new_mode}'")
             else:
-                print(f"[{datetime.now()}] Warning: Failed to switch mode: {result.stderr}")
+                print(f"[{datetime.now()}] ===== MODE SWITCH FAILED ======")
+                print(f"[{datetime.now()}] Exit code: {result.returncode}")
+                print(f"[{datetime.now()}] Error: {result.stderr}")
+        except subprocess.TimeoutExpired as e:
+            print(f"[{datetime.now()}] ===== MODE SWITCH TIMEOUT ======")
+            print(f"[{datetime.now()}] Error: Command timed out: {e}")
         except Exception as e:
-            print(f"[{datetime.now()}] Warning: Error switching mode: {e}")
+            print(f"[{datetime.now()}] ===== MODE SWITCH EXCEPTION ======")
+            print(f"[{datetime.now()}] Error: {e}")
+            import traceback
+            traceback.print_exc()
+        
+        # Flush output to ensure logs are visible
+        import sys
+        sys.stdout.flush()
+        sys.stderr.flush()
     
     # Get display options
     auto_rotate = request.form.get('auto_rotate', 'true').lower() == 'true'
