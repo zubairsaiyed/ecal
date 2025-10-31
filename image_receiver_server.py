@@ -6,10 +6,15 @@ import subprocess
 import sys
 import gc
 import json
+import threading
 from datetime import datetime
 from PIL import Image
 
 app = Flask(__name__)
+
+# Global calendar sync process
+_calendar_sync_process = None
+_calendar_sync_lock = threading.Lock()
 
 # Helper function to log to stderr (which Flask shows) for important messages
 def log_info(message):
@@ -22,6 +27,7 @@ def log_info(message):
 IMAGE_SCRIPT = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'display_image.py')
 CONFIG_FILE = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'config.json')
 SERVICE_MANAGER = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'service_manager.py')
+CALENDAR_SYNC_SCRIPT = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'calendar_sync_service.py')
 
 # Memory optimization settings
 MAX_IMAGE_DIMENSION = 2000  # Maximum dimension for large images
@@ -51,6 +57,95 @@ def save_config(config):
     """Save configuration to JSON file"""
     with open(CONFIG_FILE, 'w') as f:
         json.dump(config, f, indent=2)
+
+def start_calendar_sync_process():
+    """Start calendar sync service as a background process"""
+    global _calendar_sync_process
+    
+    with _calendar_sync_lock:
+        if _calendar_sync_process and _calendar_sync_process.poll() is None:
+            log_info(f"[{datetime.now()}] Calendar sync process already running (PID: {_calendar_sync_process.pid})")
+            return True
+        
+        config = load_config()
+        sync_config = config.get('calendar_sync', {})
+        receiver_config = config.get('image_receiver', {})
+        
+        # Determine endpoint URL from image_receiver config
+        receiver_host = receiver_config.get('host', '0.0.0.0')
+        receiver_port = receiver_config.get('port', 8000)
+        
+        if receiver_host == '0.0.0.0':
+            endpoint_host = 'localhost'
+        else:
+            endpoint_host = receiver_host
+        
+        endpoint_url = f"http://{endpoint_host}:{receiver_port}/upload"
+        calendar_url = sync_config.get('calendar_url', 'http://localhost:5000')
+        
+        # Build command
+        cmd = [sys.executable, CALENDAR_SYNC_SCRIPT]
+        
+        if sync_config.get('scheduled', False):
+            cmd.append('--scheduled')
+            cmd.extend(['--sleep-hours', str(sync_config.get('sleep_hours', 12))])
+        else:
+            cmd.extend(['--poll-interval', str(sync_config.get('poll_interval', 10))])
+        
+        cmd.extend(['--calendar-url', calendar_url])
+        cmd.extend(['--endpoint-url', endpoint_url])
+        
+        log_info(f"[{datetime.now()}] Starting calendar sync process...")
+        log_info(f"[{datetime.now()}] Command: {' '.join(cmd)}")
+        
+        try:
+            _calendar_sync_process = subprocess.Popen(
+                cmd,
+                stdout=None,  # Let output go to stderr/stdout
+                stderr=None,
+                start_new_session=True
+            )
+            log_info(f"[{datetime.now()}] Calendar sync process started (PID: {_calendar_sync_process.pid})")
+            return True
+        except Exception as e:
+            log_info(f"[{datetime.now()}] Failed to start calendar sync process: {e}")
+            return False
+
+def stop_calendar_sync_process():
+    """Stop calendar sync service process"""
+    global _calendar_sync_process
+    
+    with _calendar_sync_lock:
+        if not _calendar_sync_process:
+            log_info(f"[{datetime.now()}] No calendar sync process to stop")
+            return True
+        
+        if _calendar_sync_process.poll() is not None:
+            log_info(f"[{datetime.now()}] Calendar sync process already stopped")
+            _calendar_sync_process = None
+            return True
+        
+        log_info(f"[{datetime.now()}] Stopping calendar sync process (PID: {_calendar_sync_process.pid})...")
+        
+        try:
+            # Try graceful termination first
+            _calendar_sync_process.terminate()
+            
+            # Wait up to 5 seconds for termination
+            try:
+                _calendar_sync_process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                log_info(f"[{datetime.now()}] Process didn't terminate, forcing kill...")
+                _calendar_sync_process.kill()
+                _calendar_sync_process.wait()
+            
+            log_info(f"[{datetime.now()}] Calendar sync process stopped")
+            _calendar_sync_process = None
+            return True
+        except Exception as e:
+            log_info(f"[{datetime.now()}] Error stopping calendar sync process: {e}")
+            _calendar_sync_process = None
+            return False
 
 def optimize_image_memory(img):
     """Optimize image for memory usage"""
@@ -112,12 +207,13 @@ def upload_image():
                     log_info(f"[{datetime.now()}] ===== MODE SWITCH SUCCESSFUL ======")
                     
                     # Restart service to apply the mode change
+                    # Use longer timeout to allow for service restart
                     log_info(f"[{datetime.now()}] Restarting service to apply mode change...")
                     restart_result = subprocess.run(
                         [sys.executable, SERVICE_MANAGER, 'restart'],
                         capture_output=True,
                         text=True,
-                        timeout=10
+                        timeout=30
                     )
                     
                     if restart_result.stdout:
@@ -351,7 +447,7 @@ def mode():
 
 @app.route('/mode/switch', methods=['POST'])
 def switch_mode():
-    """Switch mode and restart service"""
+    """Switch mode without restarting the main service"""
     try:
         data = request.get_json()
         new_mode = data.get('mode')
@@ -360,7 +456,7 @@ def switch_mode():
         config = load_config()
         current_mode = config.get('mode', 'image_receiver')
         
-        log_info(f"[{datetime.now()}] ===== MODE SWITCH REQUEST ======")
+        log_info(f"[{datetime.now()}] ===== MODE SWITCH REQUEST (NO RESTART) =====")
         log_info(f"[{datetime.now()}] Current mode: {current_mode}")
         log_info(f"[{datetime.now()}] Requested mode: {new_mode}")
         
@@ -376,42 +472,49 @@ def switch_mode():
                 'mode': new_mode
             })
         
-        log_info(f"[{datetime.now()}] Calling service_manager to switch from {current_mode} to {new_mode}...")
+        # Update config mode
+        config['mode'] = new_mode
+        save_config(config)
+        log_info(f"[{datetime.now()}] Config updated to {new_mode} mode")
         
-        # Use service manager to switch mode
-        result = subprocess.run(
-            [sys.executable, SERVICE_MANAGER, 'switch', new_mode],
-            capture_output=True,
-            text=True,
-            timeout=15
-        )
+        # Control calendar sync process based on mode
+        if new_mode == 'calendar_sync':
+            # Stop calendar sync if running (shouldn't be, but just in case)
+            stop_calendar_sync_process()
+            # Start calendar sync process
+            if start_calendar_sync_process():
+                log_info(f"[{datetime.now()}] ===== MODE SWITCH SUCCESSFUL: {current_mode} -> {new_mode} =====")
+                log_info(f"[{datetime.now()}] Calendar sync process started - will fetch initial image shortly")
+                return jsonify({
+                    'status': 'success',
+                    'message': f'Switched to {new_mode} mode. Calendar sync started.',
+                    'mode': new_mode
+                })
+            else:
+                log_info(f"[{datetime.now()}] ===== MODE SWITCH FAILED: Could not start calendar sync =====")
+                return jsonify({
+                    'error': 'Failed to start calendar sync process',
+                    'details': 'Check logs for details'
+                }), 500
+        else:  # image_receiver mode
+            # Stop calendar sync process if running
+            if stop_calendar_sync_process():
+                log_info(f"[{datetime.now()}] ===== MODE SWITCH SUCCESSFUL: {current_mode} -> {new_mode} =====")
+                log_info(f"[{datetime.now()}] Calendar sync process stopped")
+                return jsonify({
+                    'status': 'success',
+                    'message': f'Switched to {new_mode} mode. Calendar sync stopped.',
+                    'mode': new_mode
+                })
+            else:
+                # Still succeeded even if stop failed (maybe it wasn't running)
+                log_info(f"[{datetime.now()}] ===== MODE SWITCH SUCCESSFUL: {current_mode} -> {new_mode} =====")
+                return jsonify({
+                    'status': 'success',
+                    'message': f'Switched to {new_mode} mode',
+                    'mode': new_mode
+                })
         
-        log_info(f"[{datetime.now()}] service_manager exit code: {result.returncode}")
-        if result.stdout:
-            log_info(f"[{datetime.now()}] service_manager stdout: {result.stdout}")
-        if result.stderr:
-            log_info(f"[{datetime.now()}] service_manager stderr: {result.stderr}")
-        
-        if result.returncode == 0:
-            log_info(f"[{datetime.now()}] ===== MODE SWITCH SUCCESSFUL: {current_mode} -> {new_mode} ======")
-            return jsonify({
-                'status': 'success',
-                'message': f'Switched to {new_mode} mode and restarted service',
-                'mode': new_mode
-            })
-        else:
-            log_info(f"[{datetime.now()}] ===== MODE SWITCH FAILED ======")
-            log_info(f"[{datetime.now()}] Error details: {result.stderr}")
-            return jsonify({
-                'error': 'Failed to switch mode',
-                'details': result.stderr
-            }), 500
-    except subprocess.TimeoutExpired:
-        log_info(f"[{datetime.now()}] ===== MODE SWITCH TIMEOUT ======")
-        return jsonify({
-            'error': 'Mode switch timed out',
-            'details': 'Service manager did not respond in time'
-        }), 500
     except Exception as e:
         log_info(f"[{datetime.now()}] ===== MODE SWITCH EXCEPTION ======")
         log_info(f"[{datetime.now()}] Error: {e}")
