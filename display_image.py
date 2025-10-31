@@ -117,6 +117,12 @@ def display_image(image_path, zoom_to_fit=False, test_rotation=None, auto_rotate
                     zoom_to_fit = True
             else:
                 print(f"No auto-rotation needed (current orientation maximizes screen usage)")
+        else:
+            # When auto_rotate is disabled, apply fixed 90° counterclockwise rotation
+            print("Auto-rotate disabled: applying 90° counterclockwise rotation")
+            Himage = Himage.rotate(90, expand=True)
+            print(f"Image size after 90° counterclockwise rotation: {Himage.size}")
+            image_was_rotated = True
         
         # Resize image to fit the display if necessary
         if Himage.size != (epd13in3E.EPD_WIDTH, epd13in3E.EPD_HEIGHT):
