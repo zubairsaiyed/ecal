@@ -683,7 +683,6 @@ if __name__ == '__main__':
     
     if current_mode == 'calendar_sync':
         # Wait a moment for Flask to start, then start calendar sync process
-        import threading
         def start_sync_delayed():
             time.sleep(2)  # Give Flask time to start
             log_info(f"[{datetime.now()}] Auto-starting calendar sync process (mode is calendar_sync)...")
@@ -692,4 +691,4 @@ if __name__ == '__main__':
         thread = threading.Thread(target=start_sync_delayed, daemon=True)
         thread.start()
     
-    app.run(host='0.0.0.0', port=8000)
+    app.run(host='0.0.0.0', port=8000, threaded=True, use_reloader=False)

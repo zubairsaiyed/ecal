@@ -99,14 +99,13 @@ After=network.target
 Wants=network.target
 
 [Service]
-Type=forking
+Type=simple
 User=$CURRENT_USER
 WorkingDirectory=$PROJECT_DIR
 Environment=PATH=$PROJECT_DIR/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 Environment=PYTHONPATH=$PROJECT_DIR
-ExecStart=$PROJECT_DIR/venv/bin/python3 $PROJECT_DIR/service_manager.py start
-ExecStop=$PROJECT_DIR/venv/bin/python3 $PROJECT_DIR/service_manager.py stop
-ExecReload=$PROJECT_DIR/venv/bin/python3 $PROJECT_DIR/service_manager.py restart
+ExecStart=$PROJECT_DIR/venv/bin/python3 $PROJECT_DIR/image_receiver_server.py
+ExecStop=/bin/kill -s TERM $MAINPID
 Restart=on-failure
 RestartSec=10
 StandardOutput=append:/var/log/ecal/ecal-display.log
