@@ -5,6 +5,7 @@
 #
 # This script polls the calendar server for changes and uploads screenshots to the display client.
 # Note: The calendar server (calendar_server.py) handles screenshot generation via its /image endpoint.
+# Note: The service always polls every 5 seconds for changes.
 
 set -e
 
@@ -12,9 +13,6 @@ set -e
 CALENDAR_URL="http://localhost:5000"
 DISPLAY_CLIENT_IP="raspberrypi.local"  # Change to your display Pi's IP/hostname
 DISPLAY_PORT="8000"
-POLL_INTERVAL="10"
-SCHEDULED_MODE=false
-SLEEP_HOURS="12"
 
 # Colors for output
 RED='\033[0;31m'
@@ -70,22 +68,6 @@ DISPLAY_CLIENT_IP=${input:-$DISPLAY_CLIENT_IP}
 read -p "Display Client Port [$DISPLAY_PORT]: " input
 DISPLAY_PORT=${input:-$DISPLAY_PORT}
 
-echo ""
-echo "Mode Selection:"
-echo "1) Dev Mode - Continuous polling (checks for changes every N seconds)"
-echo "2) Scheduled Mode - Periodic updates (updates every N hours)"
-echo ""
-read -p "Select mode (1 or 2) [1]: " mode_choice
-
-if [ "$mode_choice" = "2" ]; then
-    SCHEDULED_MODE=true
-    read -p "Update interval (hours) [$SLEEP_HOURS]: " input
-    SLEEP_HOURS=${input:-$SLEEP_HOURS}
-else
-    read -p "Poll interval (seconds) [$POLL_INTERVAL]: " input
-    POLL_INTERVAL=${input:-$POLL_INTERVAL}
-fi
-
 # Construct endpoint URL
 ENDPOINT_URL="http://${DISPLAY_CLIENT_IP}:${DISPLAY_PORT}/upload"
 
@@ -109,28 +91,17 @@ else
     fi
 fi
 
-# Build command
+# Build command - always polls every 5 seconds
 CMD="python3 calendar_sync_service.py"
 CMD="$CMD --calendar-url $CALENDAR_URL"
 CMD="$CMD --endpoint-url $ENDPOINT_URL"
-
-if [ "$SCHEDULED_MODE" = true ]; then
-    CMD="$CMD --scheduled"
-    CMD="$CMD --sleep-hours $SLEEP_HOURS"
-else
-    CMD="$CMD --poll-interval $POLL_INTERVAL"
-fi
 
 # Summary
 echo ""
 echo "=== Starting Calendar Sync Server ==="
 echo "Calendar URL: $CALENDAR_URL"
 echo "Display Client: $ENDPOINT_URL"
-if [ "$SCHEDULED_MODE" = true ]; then
-    echo "Mode: Scheduled (updates every $SLEEP_HOURS hours)"
-else
-    echo "Mode: Dev (polls every $POLL_INTERVAL seconds)"
-fi
+echo "Poll Interval: 5 seconds (fixed)"
 echo ""
 echo "Press Ctrl+C to stop"
 echo ""
