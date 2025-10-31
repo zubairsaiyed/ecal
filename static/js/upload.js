@@ -14,8 +14,91 @@ async function loadCurrentMode() {
         const response = await fetch('/mode');
         const data = await response.json();
         updateModeUI(data.mode);
+        
+        // Show/hide calendar sync status based on mode
+        const statusDiv = document.getElementById('calendarSyncStatus');
+        if (data.mode === 'calendar_sync') {
+            statusDiv.style.display = 'block';
+            startCalendarSyncStatusPolling();
+        } else {
+            statusDiv.style.display = 'none';
+            stopCalendarSyncStatusPolling();
+        }
     } catch (error) {
         console.error('Error loading mode:', error);
+    }
+}
+
+// Calendar sync status polling
+let calendarSyncStatusInterval = null;
+
+async function updateCalendarSyncStatus() {
+    try {
+        const response = await fetch('/calendar_sync/status');
+        const status = await response.json();
+        
+        const statusDiv = document.getElementById('calendarSyncStatus');
+        const indicator = document.getElementById('syncActiveIndicator');
+        const statusText = document.getElementById('syncStatusText');
+        const statusDetails = document.getElementById('syncStatusDetails');
+        
+        if (!status.active) {
+            indicator.className = 'status-indicator inactive';
+            statusText.textContent = 'Calendar sync is not active';
+            statusDetails.textContent = '';
+            return;
+        }
+        
+        // Update indicator based on activity
+        if (status.fetching) {
+            indicator.className = 'status-indicator fetching';
+            statusText.textContent = '🔄 Fetching calendar image...';
+        } else if (status.uploading) {
+            indicator.className = 'status-indicator uploading';
+            statusText.textContent = '📤 Uploading to display...';
+        } else if (status.last_error) {
+            indicator.className = 'status-indicator error';
+            statusText.textContent = '❌ Error: ' + status.last_error;
+        } else {
+            indicator.className = 'status-indicator active';
+            statusText.textContent = '✅ Calendar sync active';
+        }
+        
+        // Update details
+        let details = [];
+        if (status.last_fetch_time) {
+            const fetchTime = new Date(status.last_fetch_time);
+            details.push(`Last fetch: ${fetchTime.toLocaleTimeString()}`);
+        }
+        if (status.last_upload_time) {
+            const uploadTime = new Date(status.last_upload_time);
+            details.push(`Last upload: ${uploadTime.toLocaleTimeString()}`);
+        }
+        if (status.process_pid) {
+            details.push(`PID: ${status.process_pid}`);
+        }
+        statusDetails.textContent = details.join(' • ');
+        
+    } catch (error) {
+        console.error('Error fetching calendar sync status:', error);
+    }
+}
+
+function startCalendarSyncStatusPolling() {
+    // Stop any existing polling
+    stopCalendarSyncStatusPolling();
+    
+    // Update immediately
+    updateCalendarSyncStatus();
+    
+    // Then poll every 1 second
+    calendarSyncStatusInterval = setInterval(updateCalendarSyncStatus, 1000);
+}
+
+function stopCalendarSyncStatusPolling() {
+    if (calendarSyncStatusInterval) {
+        clearInterval(calendarSyncStatusInterval);
+        calendarSyncStatusInterval = null;
     }
 }
 
@@ -69,11 +152,23 @@ async function switchMode() {
             
             updateModeUI(targetMode);
             
-            // If switching to calendar sync, show a message about the service
+            // If switching to calendar sync, show a message and start polling status
             if (targetMode === 'calendar_sync') {
+                const statusDiv = document.getElementById('calendarSyncStatus');
+                if (statusDiv) {
+                    statusDiv.style.display = 'block';
+                    startCalendarSyncStatusPolling();
+                }
                 setTimeout(() => {
-                    status.textContent = '📅 Now in Calendar Sync mode. The image upload interface is disabled.';
+                    status.textContent = '📅 Now in Calendar Sync mode. Calendar sync status shown above.';
                 }, 2000);
+            } else {
+                // Switching to image receiver - hide calendar sync status
+                const statusDiv = document.getElementById('calendarSyncStatus');
+                if (statusDiv) {
+                    statusDiv.style.display = 'none';
+                    stopCalendarSyncStatusPolling();
+                }
             }
         } else {
             status.textContent = `❌ Failed to switch mode: ${result.error}`;

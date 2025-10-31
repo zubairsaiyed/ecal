@@ -309,6 +309,74 @@ body {
     100% { transform: rotate(360deg); }
 }
 
+.calendar-sync-status {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 12px;
+    margin: 15px 30px;
+    padding: 15px;
+}
+
+.calendar-sync-status .status-header {
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 10px;
+    font-size: 14px;
+}
+
+.calendar-sync-status .status-content {
+    font-size: 13px;
+}
+
+.calendar-sync-status .status-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.calendar-sync-status .status-indicator {
+    font-size: 12px;
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+}
+
+.calendar-sync-status .status-indicator.active {
+    color: #28a745;
+}
+
+.calendar-sync-status .status-indicator.fetching {
+    color: #ffc107;
+}
+
+.calendar-sync-status .status-indicator.uploading {
+    color: #17a2b8;
+}
+
+.calendar-sync-status .status-indicator.error {
+    color: #dc3545;
+}
+
+.calendar-sync-status .status-indicator.inactive {
+    color: #6c757d;
+    animation: none;
+}
+
+.calendar-sync-status .status-details {
+    font-size: 12px;
+    color: #666;
+    margin-top: 5px;
+    padding-left: 20px;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
 @media (max-width: 768px) {
     body {
         padding: 10px;
@@ -326,8 +394,13 @@ body {
         padding: 20px;
     }
     
-                    .upload-button {
-                    padding: 12px 25px;
-                    font-size: 1rem;
-                }
+    .calendar-sync-status {
+        margin: 15px 20px;
+        padding: 12px;
+    }
+    
+    .upload-button {
+        padding: 12px 25px;
+        font-size: 1rem;
+    }
 }
