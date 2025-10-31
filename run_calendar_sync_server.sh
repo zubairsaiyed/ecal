@@ -3,7 +3,8 @@
 # Calendar Sync Server Script
 # Run this on your SERVER/COMPUTE machine (NOT on the display client)
 #
-# This script generates calendar screenshots and uploads them to the display client
+# This script polls the calendar server for changes and uploads screenshots to the display client.
+# Note: The calendar server (calendar_server.py) handles screenshot generation via its /image endpoint.
 
 set -e
 
@@ -24,7 +25,9 @@ NC='\033[0m' # No Color
 echo "=== ECAL Calendar Sync Server ==="
 echo ""
 echo "This script runs the calendar sync service on the SERVER side."
-echo "It will generate screenshots and upload them to your display client."
+echo "It polls the calendar server for changes and uploads screenshots to your display client."
+echo ""
+echo "Note: Make sure calendar_server.py is running first!"
 echo ""
 
 # Get script directory
@@ -38,14 +41,13 @@ if [ ! -f "calendar_sync_service.py" ]; then
     exit 1
 fi
 
-# Check if chromium-browser is installed
-if ! command -v chromium-browser &> /dev/null; then
-    echo -e "${YELLOW}Warning: chromium-browser not found${NC}"
-    echo "Calendar sync requires chromium-browser for screenshots"
-    echo ""
-    echo "Install with:"
-    echo "  sudo apt-get update"
-    echo "  sudo apt-get install chromium-browser"
+# Check if calendar server is accessible
+echo "Testing connection to calendar server..."
+if curl -s --connect-timeout 5 "${CALENDAR_URL}/image/hash" > /dev/null 2>&1; then
+    echo -e "${GREEN}✓ Calendar server is reachable${NC}"
+else
+    echo -e "${YELLOW}⚠ Warning: Cannot reach calendar server at ${CALENDAR_URL}/image/hash${NC}"
+    echo "Make sure calendar_server.py is running first!"
     echo ""
     read -p "Continue anyway? (y/N): " -n 1 -r
     echo

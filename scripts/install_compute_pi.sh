@@ -7,8 +7,8 @@ set -e
 
 echo "=== ECAL Compute Pi Installation Script ==="
 echo "This will install:"
-echo "  - Calendar Server (web application)"
-echo "  - Calendar Sync Service (screenshot generation and upload to Display Pi)"
+echo "  - Calendar Server (web application with /image endpoint for screenshots)"
+echo "  - Calendar Sync Service (polls server for changes and uploads to Display Pi)"
 echo ""
 
 # Check if running as root
@@ -92,6 +92,7 @@ echo ""
 echo "Installing system dependencies..."
 apt update
 apt install -y chromium-browser
+echo "Note: Chromium is used by calendar_server.py for rendering screenshots"
 
 # Create log directory
 mkdir -p /var/log/ecal

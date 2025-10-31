@@ -56,8 +56,6 @@ if [ ! -f "$PROJECT_DIR/config.json" ]; then
   "mode": "image_receiver",
   "calendar_sync": {
     "calendar_url": "http://localhost:5000",
-    "screenshot_path": "cal.png",
-    "window_size": "1600,1200",
     "poll_interval": 10,
     "sleep_hours": 12,
     "scheduled": false

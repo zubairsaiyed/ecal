@@ -50,13 +50,13 @@ sudo journalctl -u ecal-display -f
 **Purpose:** Installs the calendar server and sync service on a compute/server machine.
 
 **What it does:**
-- Installs chromium-browser for screenshot generation
+- Installs chromium-browser (used by calendar_server.py for rendering)
 - Creates log directory at `/var/log/ecal`
 - Prompts for Display Pi IP/hostname and configuration
 - Creates `calendar_sync_config.env` with settings
 - Installs two systemd services:
-  - `ecal-calendar-server.service` - Calendar web application
-  - `ecal-calendar-sync.service` - Screenshot generation and upload
+  - `ecal-calendar-server.service` - Calendar web application with /image endpoint
+  - `ecal-calendar-sync.service` - Polls server for changes and uploads screenshots
 - Enables automatic startup on boot
 
 **Usage:**
@@ -188,8 +188,9 @@ sudo systemctl start ecal-display
 │   Compute/Server    │          │   Display Pi        │
 │                     │  HTTP    │                     │
 │  Calendar Server ───┼─────────>│  Image Receiver     │
-│  Calendar Sync      │  Upload  │  (Port 8000)        │
-│  (Chromium)         │  Images  │                     │
+│  (/image endpoint)  │  Upload  │  (Port 8000)        │
+│  Calendar Sync ─────┼─> Polls  │                     │
+│  (No Chromium)      │  Server  │                     │
 └─────────────────────┘          └─────────────────────┘
 ```
 
@@ -296,8 +297,8 @@ The service operates in two modes:
 - Auto-rotation and zoom features
 
 ### 📅 Calendar Sync Mode
-- Automatic calendar screenshot capture
-- Change detection
+- Polls calendar server for changes (server handles rendering)
+- Change detection via hash polling
 - Configurable polling intervals
 
 Edit `config.json` to configure mode-specific settings:
