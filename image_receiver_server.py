@@ -216,7 +216,12 @@ def upload_image():
     
     log_info(f"[{datetime.now()}] Upload request received. Current mode: {current_mode}")
     
-    if current_mode == 'calendar_sync':
+    # Check if this upload is from the calendar sync service itself (should not trigger mode switch)
+    is_sync_upload = request.headers.get('X-Calendar-Sync-Upload') == 'true'
+    if is_sync_upload:
+        log_info(f"[{datetime.now()}] Calendar sync upload detected - skipping mode switch")
+    
+    if current_mode == 'calendar_sync' and not is_sync_upload:
         log_info(f"[{datetime.now()}] ===== MODE SWITCH: Upload detected while in calendar_sync mode ======")
         log_info(f"[{datetime.now()}] Switching to image_receiver mode...")
         try:
