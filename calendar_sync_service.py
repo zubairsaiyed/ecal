@@ -43,7 +43,7 @@ def download_image(image_url, local_path, status_endpoint=None):
     log_info(f"[{datetime.now()}] Downloading image from {image_url}...")
     update_status(status_endpoint, fetching=True, uploading=False)
     try:
-        response = requests.get(image_url, timeout=39)
+        response = requests.get(image_url, timeout=60)
         if response.status_code == 200:
             with open(local_path, 'wb') as f:
                 f.write(response.content)
@@ -78,7 +78,7 @@ def upload_image_to_endpoint(image_path, endpoint_url, status_endpoint=None, max
                 files = {'file': (os.path.basename(image_path), img_file, 'image/png')}
                 # Add a custom header to identify this upload as coming from calendar sync
                 headers = {'X-Calendar-Sync-Upload': 'true'}
-                response = requests.post(endpoint_url, files=files, headers=headers, timeout=39)
+                response = requests.post(endpoint_url, files=files, headers=headers, timeout=60)
             if response.status_code == 200:
                 log_info(f"[{datetime.now()}] Image uploaded successfully.")
                 update_status(status_endpoint, uploading=False, error=None)  # Clear any previous errors
