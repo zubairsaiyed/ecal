@@ -12,17 +12,23 @@ from PIL import Image
 
 app = Flask(__name__)
 
-# Global calendar sync process
+# Global calendar sync process and status
 _calendar_sync_process = None
 _calendar_sync_lock = threading.Lock()
+_calendar_sync_status = {
+    'active': False,
+    'last_fetch_time': None,
+    'last_upload_time': None,
+    'last_error': None,
+    'fetching': False,
+    'uploading': False
+}
 
 # Helper function to log to stderr (which Flask shows) for important messages
 def log_info(message):
-    """Log to both print (for stdout) and stderr (for Flask logs)"""
+    """Log to stderr (which Flask shows in logs)"""
     print(message, file=sys.stderr)
-    print(message)
     sys.stderr.flush()
-    sys.stdout.flush()
 
 IMAGE_SCRIPT = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'display_image.py')
 CONFIG_FILE = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'config.json')
@@ -106,23 +112,29 @@ def start_calendar_sync_process():
                 start_new_session=True
             )
             log_info(f"[{datetime.now()}] Calendar sync process started (PID: {_calendar_sync_process.pid})")
+            _calendar_sync_status['active'] = True
+            _calendar_sync_status['process_pid'] = _calendar_sync_process.pid
             return True
         except Exception as e:
             log_info(f"[{datetime.now()}] Failed to start calendar sync process: {e}")
+            _calendar_sync_status['active'] = False
+            _calendar_sync_status['last_error'] = str(e)
             return False
 
 def stop_calendar_sync_process():
     """Stop calendar sync service process"""
-    global _calendar_sync_process
+    global _calendar_sync_process, _calendar_sync_status
     
     with _calendar_sync_lock:
         if not _calendar_sync_process:
             log_info(f"[{datetime.now()}] No calendar sync process to stop")
+            _calendar_sync_status['active'] = False
             return True
         
         if _calendar_sync_process.poll() is not None:
             log_info(f"[{datetime.now()}] Calendar sync process already stopped")
             _calendar_sync_process = None
+            _calendar_sync_status['active'] = False
             return True
         
         log_info(f"[{datetime.now()}] Stopping calendar sync process (PID: {_calendar_sync_process.pid})...")
@@ -141,11 +153,35 @@ def stop_calendar_sync_process():
             
             log_info(f"[{datetime.now()}] Calendar sync process stopped")
             _calendar_sync_process = None
+            _calendar_sync_status['active'] = False
+            _calendar_sync_status['fetching'] = False
+            _calendar_sync_status['uploading'] = False
             return True
         except Exception as e:
             log_info(f"[{datetime.now()}] Error stopping calendar sync process: {e}")
             _calendar_sync_process = None
+            _calendar_sync_status['active'] = False
             return False
+
+def update_calendar_sync_status(fetching=False, uploading=False, error=None):
+    """Update calendar sync status"""
+    global _calendar_sync_status
+    with _calendar_sync_lock:
+        if fetching is not None:
+            _calendar_sync_status['fetching'] = fetching
+            if fetching:
+                _calendar_sync_status['last_fetch_time'] = datetime.now().isoformat()
+        if uploading is not None:
+            _calendar_sync_status['uploading'] = uploading
+            if uploading:
+                _calendar_sync_status['last_upload_time'] = datetime.now().isoformat()
+        if error is not None:
+            _calendar_sync_status['last_error'] = error
+            if error:
+                _calendar_sync_status['last_error_time'] = datetime.now().isoformat()
+            else:
+                _calendar_sync_status['last_error'] = None
+                _calendar_sync_status['last_error_time'] = None
 
 def optimize_image_memory(img):
     """Optimize image for memory usage"""
@@ -521,6 +557,55 @@ def switch_mode():
         import traceback
         traceback.print_exc(file=sys.stderr)
         return jsonify({'error': str(e)}), 500
+
+@app.route('/calendar_sync/status', methods=['GET', 'POST'])
+def calendar_sync_status():
+    """Get or update calendar sync status"""
+    if request.method == 'POST':
+        # Calendar sync service updates its status here
+        try:
+            data = request.get_json()
+            
+            with _calendar_sync_lock:
+                if 'fetching' in data:
+                    _calendar_sync_status['fetching'] = bool(data['fetching'])
+                    if data['fetching']:
+                        _calendar_sync_status['last_fetch_time'] = datetime.now().isoformat()
+                
+                if 'uploading' in data:
+                    _calendar_sync_status['uploading'] = bool(data['uploading'])
+                    if data['uploading']:
+                        _calendar_sync_status['last_upload_time'] = datetime.now().isoformat()
+                
+                if 'error' in data:
+                    error = data['error']
+                    _calendar_sync_status['last_error'] = error if error else None
+                    if error:
+                        _calendar_sync_status['last_error_time'] = datetime.now().isoformat()
+                    else:
+                        _calendar_sync_status['last_error_time'] = None
+            
+            return jsonify({'status': 'success'})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 400
+    
+    # GET request - return current status
+    with _calendar_sync_lock:
+        status = _calendar_sync_status.copy()
+        
+        # Check if process is actually running
+        if _calendar_sync_process:
+            if _calendar_sync_process.poll() is None:
+                status['active'] = True
+                status['process_pid'] = _calendar_sync_process.pid
+            else:
+                status['active'] = False
+                status['process_pid'] = None
+        else:
+            status['active'] = False
+            status['process_pid'] = None
+        
+        return jsonify(status)
 
 @app.route('/mode/config', methods=['GET', 'POST'])
 def mode_config():

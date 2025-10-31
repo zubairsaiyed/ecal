@@ -22,44 +22,73 @@ SLEEP_HOURS = 12
 # ENDPOINT_URL is a placeholder; replace with your actual endpoint
 ENDPOINT_URL = "http://raspberrypi.local:8000/upload"
 
-def download_image(image_url, local_path):
+def update_status(status_endpoint, fetching=None, uploading=None, error=None):
+    """Update status on the image receiver server"""
+    try:
+        data = {}
+        if fetching is not None:
+            data['fetching'] = fetching
+        if uploading is not None:
+            data['uploading'] = uploading
+        if error is not None:
+            data['error'] = error
+        
+        if data:
+            requests.post(status_endpoint, json=data, timeout=2)
+    except Exception:
+        # Silently fail - status updates are not critical
+        pass
+
+def download_image(image_url, local_path, status_endpoint=None):
     """Download image from the calendar server"""
     print(f"[{datetime.now()}] Downloading image from {image_url}...")
+    update_status(status_endpoint, fetching=True, uploading=False)
     try:
         response = requests.get(image_url, timeout=30)
         if response.status_code == 200:
             with open(local_path, 'wb') as f:
                 f.write(response.content)
             print(f"Image downloaded to {local_path}")
+            update_status(status_endpoint, fetching=False)
             return True
         else:
-            print(f"Failed to download image: {response.status_code}")
+            error_msg = f"Failed to download image: {response.status_code}"
+            print(error_msg)
+            update_status(status_endpoint, fetching=False, error=error_msg)
             return False
     except Exception as e:
-        print(f"Error downloading image: {e}")
+        error_msg = f"Error downloading image: {e}"
+        print(error_msg)
+        update_status(status_endpoint, fetching=False, error=error_msg)
         return False
 
-def upload_image_to_endpoint(image_path, endpoint_url):
+def upload_image_to_endpoint(image_path, endpoint_url, status_endpoint=None):
     print(f"[{datetime.now()}] Uploading {image_path} to endpoint {endpoint_url}...")
+    update_status(status_endpoint, fetching=False, uploading=True)
     try:
         with open(image_path, 'rb') as img_file:
             files = {'file': (os.path.basename(image_path), img_file, 'image/png')}
             response = requests.post(endpoint_url, files=files)
         if response.status_code == 200:
             print("Image uploaded successfully.")
+            update_status(status_endpoint, uploading=False, error=None)
         else:
-            print(f"Failed to upload image: {response.status_code} {response.text}")
+            error_msg = f"Failed to upload image: {response.status_code} {response.text}"
+            print(error_msg)
+            update_status(status_endpoint, uploading=False, error=error_msg)
     except Exception as e:
-        print(f"Error uploading image: {e}")
+        error_msg = f"Error uploading image: {e}"
+        print(error_msg)
+        update_status(status_endpoint, uploading=False, error=error_msg)
 
-def refresh_display(image_url, endpoint_url, temp_dir):
+def refresh_display(image_url, endpoint_url, temp_dir, status_endpoint=None):
     """Download image and upload to display endpoint"""
     temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png', dir=temp_dir)
     temp_file.close()
     temp_path = temp_file.name
     
-    if download_image(image_url, temp_path):
-        upload_image_to_endpoint(temp_path, endpoint_url)
+    if download_image(image_url, temp_path, status_endpoint):
+        upload_image_to_endpoint(temp_path, endpoint_url, status_endpoint)
     
     # Clean up temp file
     try:
@@ -107,6 +136,10 @@ def main():
     hash_endpoint = f"{calendar_url}/image/hash"
     sleep_hours = args.sleep_hours
     
+    # Determine status endpoint from endpoint URL (assumes same host/port)
+    # Convert endpoint_url from http://host:port/upload to http://host:port/calendar_sync/status
+    status_endpoint = endpoint_url.replace('/upload', '/calendar_sync/status')
+    
     # Create temp directory for downloaded images
     temp_dir = tempfile.mkdtemp()
     print(f"Using temp directory: {temp_dir}")
@@ -117,8 +150,9 @@ def main():
         log_info(f"[{datetime.now()}] Calendar URL: {calendar_url}")
         log_info(f"[{datetime.now()}] Image endpoint: {image_endpoint}")
         log_info(f"[{datetime.now()}] Upload endpoint: {endpoint_url}")
+        log_info(f"[{datetime.now()}] Status endpoint: {status_endpoint}")
         log_info(f"[{datetime.now()}] Fetching latest calendar image immediately...")
-        refresh_display(image_endpoint, endpoint_url, temp_dir)
+        refresh_display(image_endpoint, endpoint_url, temp_dir, status_endpoint)
         log_info(f"[{datetime.now()}] ===== INITIAL IMAGE FETCHED AND DISPLAYED =====")
         
         if args.scheduled:
@@ -126,7 +160,7 @@ def main():
             while True:
                 print(f"[{datetime.now()}] Sleeping for {sleep_hours} hours...")
                 time.sleep(sleep_hours * 3600)
-                refresh_display(image_endpoint, endpoint_url, temp_dir)
+                refresh_display(image_endpoint, endpoint_url, temp_dir, status_endpoint)
         else:
             # Default: DEV MODE
             poll_interval = args.poll_interval
@@ -142,7 +176,7 @@ def main():
                 new_hash = get_image_hash(hash_endpoint)
                 if new_hash and new_hash != last_hash:
                     print(f"[DEV MODE] Change detected at {datetime.now()}! Refreshing...")
-                    refresh_display(image_endpoint, endpoint_url, temp_dir)
+                    refresh_display(image_endpoint, endpoint_url, temp_dir, status_endpoint)
                     last_hash = new_hash
     finally:
         # Clean up temp directory
