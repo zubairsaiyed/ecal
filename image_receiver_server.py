@@ -11,6 +11,14 @@ from PIL import Image
 
 app = Flask(__name__)
 
+# Helper function to log to stderr (which Flask shows) for important messages
+def log_info(message):
+    """Log to both print (for stdout) and stderr (for Flask logs)"""
+    print(message, file=sys.stderr)
+    print(message)
+    sys.stderr.flush()
+    sys.stdout.flush()
+
 IMAGE_SCRIPT = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'display_image.py')
 CONFIG_FILE = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'config.json')
 SERVICE_MANAGER = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'service_manager.py')
@@ -73,11 +81,11 @@ def upload_image():
     current_mode = config.get('mode', 'image_receiver')
     mode_switched = False
     
-    print(f"[{datetime.now()}] Upload request received. Current mode: {current_mode}")
+    log_info(f"[{datetime.now()}] Upload request received. Current mode: {current_mode}")
     
     if current_mode == 'calendar_sync':
-        print(f"[{datetime.now()}] ===== MODE SWITCH: Upload detected while in calendar_sync mode ======")
-        print(f"[{datetime.now()}] Switching to image_receiver mode...")
+        log_info(f"[{datetime.now()}] ===== MODE SWITCH: Upload detected while in calendar_sync mode ======")
+        log_info(f"[{datetime.now()}] Switching to image_receiver mode...")
         try:
             # Switch to image_receiver mode using service manager
             result = subprocess.run(
@@ -89,22 +97,22 @@ def upload_image():
             
             # Log the full output
             if result.stdout:
-                print(f"[{datetime.now()}] set-mode stdout: {result.stdout}")
+                log_info(f"[{datetime.now()}] set-mode stdout: {result.stdout}")
             if result.stderr:
-                print(f"[{datetime.now()}] set-mode stderr: {result.stderr}")
+                log_info(f"[{datetime.now()}] set-mode stderr: {result.stderr}")
             
             if result.returncode == 0:
                 # Verify the mode was actually changed
                 new_config = load_config()
                 new_mode = new_config.get('mode', 'unknown')
-                print(f"[{datetime.now()}] Mode changed from calendar_sync to {new_mode}")
+                log_info(f"[{datetime.now()}] Mode changed from calendar_sync to {new_mode}")
                 
                 if new_mode == 'image_receiver':
                     mode_switched = True
-                    print(f"[{datetime.now()}] ===== MODE SWITCH SUCCESSFUL ======")
+                    log_info(f"[{datetime.now()}] ===== MODE SWITCH SUCCESSFUL ======")
                     
                     # Restart service to apply the mode change
-                    print(f"[{datetime.now()}] Restarting service to apply mode change...")
+                    log_info(f"[{datetime.now()}] Restarting service to apply mode change...")
                     restart_result = subprocess.run(
                         [sys.executable, SERVICE_MANAGER, 'restart'],
                         capture_output=True,
@@ -113,33 +121,28 @@ def upload_image():
                     )
                     
                     if restart_result.stdout:
-                        print(f"[{datetime.now()}] restart stdout: {restart_result.stdout}")
+                        log_info(f"[{datetime.now()}] restart stdout: {restart_result.stdout}")
                     if restart_result.stderr:
-                        print(f"[{datetime.now()}] restart stderr: {restart_result.stderr}")
+                        log_info(f"[{datetime.now()}] restart stderr: {restart_result.stderr}")
                     
                     if restart_result.returncode == 0:
-                        print(f"[{datetime.now()}] ===== SERVICE RESTARTED IN IMAGE_RECEIVER MODE ======")
+                        log_info(f"[{datetime.now()}] ===== SERVICE RESTARTED IN IMAGE_RECEIVER MODE ======")
                     else:
-                        print(f"[{datetime.now()}] Warning: Service restart returned non-zero exit code: {restart_result.returncode}")
+                        log_info(f"[{datetime.now()}] Warning: Service restart returned non-zero exit code: {restart_result.returncode}")
                 else:
-                    print(f"[{datetime.now()}] ERROR: Mode verification failed. Expected 'image_receiver', got '{new_mode}'")
+                    log_info(f"[{datetime.now()}] ERROR: Mode verification failed. Expected 'image_receiver', got '{new_mode}'")
             else:
-                print(f"[{datetime.now()}] ===== MODE SWITCH FAILED ======")
-                print(f"[{datetime.now()}] Exit code: {result.returncode}")
-                print(f"[{datetime.now()}] Error: {result.stderr}")
+                log_info(f"[{datetime.now()}] ===== MODE SWITCH FAILED ======")
+                log_info(f"[{datetime.now()}] Exit code: {result.returncode}")
+                log_info(f"[{datetime.now()}] Error: {result.stderr}")
         except subprocess.TimeoutExpired as e:
-            print(f"[{datetime.now()}] ===== MODE SWITCH TIMEOUT ======")
-            print(f"[{datetime.now()}] Error: Command timed out: {e}")
+            log_info(f"[{datetime.now()}] ===== MODE SWITCH TIMEOUT ======")
+            log_info(f"[{datetime.now()}] Error: Command timed out: {e}")
         except Exception as e:
-            print(f"[{datetime.now()}] ===== MODE SWITCH EXCEPTION ======")
-            print(f"[{datetime.now()}] Error: {e}")
+            log_info(f"[{datetime.now()}] ===== MODE SWITCH EXCEPTION ======")
+            log_info(f"[{datetime.now()}] Error: {e}")
             import traceback
-            traceback.print_exc()
-        
-        # Flush output to ensure logs are visible
-        import sys
-        sys.stdout.flush()
-        sys.stderr.flush()
+            traceback.print_exc(file=sys.stderr)
     
     # Get display options
     auto_rotate = request.form.get('auto_rotate', 'true').lower() == 'true'
@@ -353,28 +356,67 @@ def switch_mode():
         data = request.get_json()
         new_mode = data.get('mode')
         
+        # Get current mode for logging
+        config = load_config()
+        current_mode = config.get('mode', 'image_receiver')
+        
+        log_info(f"[{datetime.now()}] ===== MODE SWITCH REQUEST ======")
+        log_info(f"[{datetime.now()}] Current mode: {current_mode}")
+        log_info(f"[{datetime.now()}] Requested mode: {new_mode}")
+        
         if new_mode not in ['image_receiver', 'calendar_sync']:
+            log_info(f"[{datetime.now()}] ERROR: Invalid mode requested")
             return jsonify({'error': 'Invalid mode. Must be image_receiver or calendar_sync'}), 400
+        
+        if current_mode == new_mode:
+            log_info(f"[{datetime.now()}] Already in {new_mode} mode, no switch needed")
+            return jsonify({
+                'status': 'success',
+                'message': f'Already in {new_mode} mode',
+                'mode': new_mode
+            })
+        
+        log_info(f"[{datetime.now()}] Calling service_manager to switch from {current_mode} to {new_mode}...")
         
         # Use service manager to switch mode
         result = subprocess.run(
             [sys.executable, SERVICE_MANAGER, 'switch', new_mode],
             capture_output=True,
-            text=True
+            text=True,
+            timeout=15
         )
         
+        log_info(f"[{datetime.now()}] service_manager exit code: {result.returncode}")
+        if result.stdout:
+            log_info(f"[{datetime.now()}] service_manager stdout: {result.stdout}")
+        if result.stderr:
+            log_info(f"[{datetime.now()}] service_manager stderr: {result.stderr}")
+        
         if result.returncode == 0:
+            log_info(f"[{datetime.now()}] ===== MODE SWITCH SUCCESSFUL: {current_mode} -> {new_mode} ======")
             return jsonify({
                 'status': 'success',
                 'message': f'Switched to {new_mode} mode and restarted service',
                 'mode': new_mode
             })
         else:
+            log_info(f"[{datetime.now()}] ===== MODE SWITCH FAILED ======")
+            log_info(f"[{datetime.now()}] Error details: {result.stderr}")
             return jsonify({
                 'error': 'Failed to switch mode',
                 'details': result.stderr
             }), 500
+    except subprocess.TimeoutExpired:
+        log_info(f"[{datetime.now()}] ===== MODE SWITCH TIMEOUT ======")
+        return jsonify({
+            'error': 'Mode switch timed out',
+            'details': 'Service manager did not respond in time'
+        }), 500
     except Exception as e:
+        log_info(f"[{datetime.now()}] ===== MODE SWITCH EXCEPTION ======")
+        log_info(f"[{datetime.now()}] Error: {e}")
+        import traceback
+        traceback.print_exc(file=sys.stderr)
         return jsonify({'error': str(e)}), 500
 
 @app.route('/mode/config', methods=['GET', 'POST'])
