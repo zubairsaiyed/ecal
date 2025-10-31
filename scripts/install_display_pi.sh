@@ -48,15 +48,26 @@ fi
 mkdir -p /var/log/ecal
 chown $CURRENT_USER:$CURRENT_USER /var/log/ecal
 
-# Create default config.json if it doesn't exist
+# Prompt for calendar server URL if config doesn't exist
 if [ ! -f "$PROJECT_DIR/config.json" ]; then
-    echo "Creating default configuration file..."
-    cat > "$PROJECT_DIR/config.json" << 'CONFIGEOF'
+    echo ""
+    echo "=== Calendar Server Configuration ==="
+    echo "Enter the calendar server URL (where calendar_server.py is running)"
+    echo "Examples:"
+    echo "  - http://192.168.1.100:5000 (remote server)"
+    echo "  - http://compute-pi.local:5000 (hostname)"
+    echo "  - http://localhost:5000 (same machine)"
+    echo ""
+    read -p "Calendar server URL [http://localhost:5000]: " CALENDAR_URL
+    CALENDAR_URL=${CALENDAR_URL:-http://localhost:5000}
+    
+    echo "Creating configuration file..."
+    cat > "$PROJECT_DIR/config.json" << CONFIGEOF
 {
   "mode": "image_receiver",
-    "calendar_sync": {
-      "calendar_url": "http://localhost:5000"
-    },
+  "calendar_sync": {
+    "calendar_url": "$CALENDAR_URL"
+  },
   "image_receiver": {
     "host": "0.0.0.0",
     "port": 8000
@@ -64,9 +75,16 @@ if [ ! -f "$PROJECT_DIR/config.json" ]; then
 }
 CONFIGEOF
     chown $CURRENT_USER:$CURRENT_USER "$PROJECT_DIR/config.json"
-    echo "Created config.json with default settings"
+    echo "Created config.json with calendar_url: $CALENDAR_URL"
 else
     echo "Config file already exists, keeping existing configuration"
+    echo ""
+    echo "Current calendar_url: $(grep -o '"calendar_url": "[^"]*"' "$PROJECT_DIR/config.json" | cut -d'"' -f4)"
+    echo ""
+    echo "To update the calendar server URL, either:"
+    echo "  1. Edit $PROJECT_DIR/config.json directly"
+    echo "  2. Use the web interface when switching to calendar_sync mode"
+    echo "  3. Use the /config API endpoint"
 fi
 
 # Make service_manager.py executable
