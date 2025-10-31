@@ -11,8 +11,31 @@ import threading
 import subprocess
 import hashlib
 import tempfile
+import sys
+import logging
 
 app = Flask(__name__)
+
+# Configure logging to go to stderr (which systemd/journald captures)
+logging.basicConfig(
+    level=logging.INFO,
+    format='[%(asctime)s] %(levelname)s: %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S',
+    handlers=[
+        logging.StreamHandler(sys.stderr)
+    ],
+    force=True  # Override any existing configuration
+)
+logger = logging.getLogger(__name__)
+
+# Configure Flask's logger to also use stderr
+app.logger.setLevel(logging.INFO)
+app.logger.handlers = [logging.StreamHandler(sys.stderr)]
+
+# Helper function for compatibility with existing print() calls
+def log_info(message):
+    """Log to stderr (which systemd captures)"""
+    logger.info(message)
 
 # Google Calendar API configuration
 SCOPES = ['https://www.googleapis.com/auth/calendar.readonly']
@@ -44,8 +67,8 @@ screenshot_cache = {
 
 def load_settings():
     if not os.path.exists(SETTINGS_FILE):
-        print(f"Creating default settings file: {SETTINGS_FILE}")
-        print("Please edit this file to add your calendar IDs and customize your preferences.")
+        log_info(f"Creating default settings file: {SETTINGS_FILE}")
+        log_info("Please edit this file to add your calendar IDs and customize your preferences.")
         save_settings(SETTINGS_DEFAULTS)
         return SETTINGS_DEFAULTS.copy()
     
@@ -66,7 +89,7 @@ def save_settings(settings):
 
 def generate_calendar_screenshot(width=1600, height=1200):
     """Generate a screenshot of the calendar page using headless chromium"""
-    print(f"[{datetime.now()}] Generating calendar screenshot...")
+    log_info(f"Generating calendar screenshot...")
     
     # Create a temporary file for the screenshot
     temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
@@ -90,21 +113,21 @@ def generate_calendar_screenshot(width=1600, height=1200):
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         
         if result.returncode != 0:
-            print(f"Screenshot failed: {result.stderr}")
+            log_info(f"Screenshot failed: {result.stderr}")
             return None
         
         # Calculate hash of the image
         with open(screenshot_path, 'rb') as f:
             image_hash = hashlib.sha256(f.read()).hexdigest()
         
-        print(f"Screenshot generated: {screenshot_path} (hash: {image_hash[:16]}...)")
+        log_info(f"Screenshot generated: {screenshot_path} (hash: {image_hash[:16]}...)")
         return screenshot_path, image_hash
         
     except subprocess.TimeoutExpired:
-        print("Screenshot generation timed out")
+        log_info("Screenshot generation timed out")
         return None
     except Exception as e:
-        print(f"Error generating screenshot: {e}")
+        log_info(f"Error generating screenshot: {e}")
         return None
 
 def get_google_calendar_service():
@@ -227,15 +250,15 @@ def index():
 def get_events():
     service, error = get_google_calendar_service()
     if error:
-        print('Service error:', error)
+        log_info(f'Service error: {error}')
         return jsonify({'error': error}), 500
 
     events, error = fetch_calendar_events(service)
     if error:
-        print('Fetch error:', error)
+        log_info(f'Fetch error: {error}')
         return jsonify({'error': error}), 500
 
-    print('Returning events:', events)
+    log_info(f'Returning {len(events)} events')
     return jsonify(events)
 
 @app.route('/api/calendar_list')
@@ -296,7 +319,7 @@ def get_calendar_image():
             try:
                 os.remove(screenshot_cache['path'])
             except Exception as e:
-                print(f"Warning: Could not remove old screenshot: {e}")
+                log_info(f"Warning: Could not remove old screenshot: {e}")
         
         # Update cache
         screenshot_cache['path'] = screenshot_path
@@ -406,7 +429,8 @@ if __name__ == '__main__':
         import shutil
         shutil.copy('calendar.html', 'templates/calendar.html')
     
-    print("Flask server starting...")
-    print("Visit http://localhost:5000 to view the calendar")
-    print("Visit http://localhost:5000/setup for setup instructions")
-    app.run(debug=True, host='0.0.0.0', port=5000) 
+    log_info("Flask server starting...")
+    log_info("Visit http://localhost:5000 to view the calendar")
+    log_info("Visit http://localhost:5000/setup for setup instructions")
+    # Run with use_reloader=False to avoid double logging in systemd
+    app.run(debug=False, host='0.0.0.0', port=5000, use_reloader=False) 
