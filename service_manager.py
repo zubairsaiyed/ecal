@@ -146,18 +146,10 @@ def start_calendar_sync():
     print("Starting Calendar Sync Service...")
     print(f"  Calendar URL: {sync_config.get('calendar_url', 'http://localhost:5000')}")
     print(f"  Endpoint URL: {endpoint_url}")
-    print(f"  Poll Interval: {sync_config.get('poll_interval', 10)}s")
-    print(f"  Scheduled Mode: {sync_config.get('scheduled', False)}")
+    print(f"  Poll Interval: 5 seconds (fixed)")
     
-    # Build command arguments
+    # Build command arguments - always polls every 5 seconds
     cmd = [sys.executable, script_path]
-    
-    if sync_config.get('scheduled', False):
-        cmd.append('--scheduled')
-        cmd.extend(['--sleep-hours', str(sync_config.get('sleep_hours', 12))])
-    else:
-        cmd.extend(['--poll-interval', str(sync_config.get('poll_interval', 10))])
-    
     cmd.extend(['--calendar-url', sync_config.get('calendar_url', 'http://localhost:5000')])
     cmd.extend(['--endpoint-url', endpoint_url])
     
@@ -222,8 +214,7 @@ def status():
     elif mode == 'calendar_sync':
         sync_config = config.get('calendar_sync', {})
         print(f"  Calendar URL: {sync_config.get('calendar_url', 'http://localhost:5000')}")
-        print(f"  Poll Interval: {sync_config.get('poll_interval', 10)}s")
-        print(f"  Scheduled Mode: {sync_config.get('scheduled', False)}")
+        print(f"  Poll Interval: 5 seconds (fixed)")
 
 def main():
     import argparse

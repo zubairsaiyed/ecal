@@ -102,6 +102,51 @@ function stopCalendarSyncStatusPolling() {
     }
 }
 
+// Trigger manual calendar sync
+async function triggerManualSync() {
+    const triggerBtn = document.getElementById('triggerSyncBtn');
+    const status = document.getElementById('status');
+    
+    if (!triggerBtn) return;
+    
+    triggerBtn.disabled = true;
+    triggerBtn.textContent = '⏳ Syncing...';
+    
+    try {
+        const response = await fetch('/calendar_sync/trigger', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            status.textContent = '✅ ' + result.message;
+            status.className = 'status success';
+            status.style.display = 'block';
+            
+            // Refresh status display to show the sync happening
+            setTimeout(() => {
+                updateCalendarSyncStatus();
+            }, 500);
+        } else {
+            status.textContent = '❌ ' + (result.error || 'Failed to trigger sync');
+            status.className = 'status error';
+            status.style.display = 'block';
+        }
+    } catch (error) {
+        console.error('Trigger sync error:', error);
+        status.textContent = '❌ Error triggering sync: ' + error.message;
+        status.className = 'status error';
+        status.style.display = 'block';
+    } finally {
+        setTimeout(() => {
+            triggerBtn.disabled = false;
+            triggerBtn.textContent = '🔄 Force Sync';
+        }, 2000);
+    }
+}
+
 // Update mode UI
 function updateModeUI(mode) {
     const modeBadge = document.getElementById('currentMode');
@@ -314,6 +359,13 @@ document.addEventListener('DOMContentLoaded', function() {
     if (modeSwitchBtn) {
         modeSwitchBtn.addEventListener('click', switchMode);
         console.log('Mode switch button listener attached');
+    }
+    
+    // Calendar sync trigger button
+    const triggerSyncBtn = document.getElementById('triggerSyncBtn');
+    if (triggerSyncBtn) {
+        triggerSyncBtn.addEventListener('click', triggerManualSync);
+        console.log('Trigger sync button listener attached');
     }
 
     // File input wrapper click event

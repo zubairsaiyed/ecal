@@ -17,7 +17,6 @@ def log_info(message):
 CALENDAR_URL = "http://localhost:5000"
 IMAGE_ENDPOINT = f"{CALENDAR_URL}/image"
 HASH_ENDPOINT = f"{CALENDAR_URL}/image/hash"
-SLEEP_HOURS = 12
 
 # ENDPOINT_URL is a placeholder; replace with your actual endpoint
 ENDPOINT_URL = "http://raspberrypi.local:8000/upload"
@@ -41,44 +40,50 @@ def update_status(status_endpoint, fetching=None, uploading=None, error=None):
 
 def download_image(image_url, local_path, status_endpoint=None):
     """Download image from the calendar server"""
-    print(f"[{datetime.now()}] Downloading image from {image_url}...")
+    log_info(f"[{datetime.now()}] Downloading image from {image_url}...")
     update_status(status_endpoint, fetching=True, uploading=False)
     try:
         response = requests.get(image_url, timeout=30)
         if response.status_code == 200:
             with open(local_path, 'wb') as f:
                 f.write(response.content)
-            print(f"Image downloaded to {local_path}")
-            update_status(status_endpoint, fetching=False)
+            log_info(f"[{datetime.now()}] Image downloaded to {local_path}")
+            update_status(status_endpoint, fetching=False, error=None)  # Clear any previous errors
             return True
         else:
-            error_msg = f"Failed to download image: {response.status_code}"
-            print(error_msg)
+            error_msg = f"Failed to download image: HTTP {response.status_code}"
+            log_info(f"[{datetime.now()}] ERROR: {error_msg}")
             update_status(status_endpoint, fetching=False, error=error_msg)
             return False
+    except requests.exceptions.ConnectionError as e:
+        error_msg = f"Connection error: Calendar server unreachable at {image_url}. Is calendar_server.py running?"
+        log_info(f"[{datetime.now()}] ERROR: {error_msg}")
+        log_info(f"[{datetime.now()}] Full error: {e}")
+        update_status(status_endpoint, fetching=False, error=error_msg)
+        return False
     except Exception as e:
         error_msg = f"Error downloading image: {e}"
-        print(error_msg)
+        log_info(f"[{datetime.now()}] ERROR: {error_msg}")
         update_status(status_endpoint, fetching=False, error=error_msg)
         return False
 
 def upload_image_to_endpoint(image_path, endpoint_url, status_endpoint=None):
-    print(f"[{datetime.now()}] Uploading {image_path} to endpoint {endpoint_url}...")
+    log_info(f"[{datetime.now()}] Uploading {image_path} to endpoint {endpoint_url}...")
     update_status(status_endpoint, fetching=False, uploading=True)
     try:
         with open(image_path, 'rb') as img_file:
             files = {'file': (os.path.basename(image_path), img_file, 'image/png')}
             response = requests.post(endpoint_url, files=files)
         if response.status_code == 200:
-            print("Image uploaded successfully.")
-            update_status(status_endpoint, uploading=False, error=None)
+            log_info(f"[{datetime.now()}] Image uploaded successfully.")
+            update_status(status_endpoint, uploading=False, error=None)  # Clear any previous errors
         else:
-            error_msg = f"Failed to upload image: {response.status_code} {response.text}"
-            print(error_msg)
+            error_msg = f"Failed to upload image: HTTP {response.status_code} - {response.text[:100]}"
+            log_info(f"[{datetime.now()}] ERROR: {error_msg}")
             update_status(status_endpoint, uploading=False, error=error_msg)
     except Exception as e:
         error_msg = f"Error uploading image: {e}"
-        print(error_msg)
+        log_info(f"[{datetime.now()}] ERROR: {error_msg}")
         update_status(status_endpoint, uploading=False, error=error_msg)
 
 def refresh_display(image_url, endpoint_url, temp_dir, status_endpoint=None):
@@ -116,12 +121,6 @@ def main():
     original_endpoint_url = ENDPOINT_URL
     
     parser = argparse.ArgumentParser(description='Calendar Sync Service - Monitors calendar changes and uploads screenshots')
-    parser.add_argument('--scheduled', action='store_true', 
-                       help='Run in scheduled mode (default: dev mode with 10-second polling)')
-    parser.add_argument('--poll-interval', type=int, default=10,
-                       help='Polling interval in seconds for dev mode (default: 10)')
-    parser.add_argument('--sleep-hours', type=int, default=12,
-                       help='Sleep interval in hours for scheduled mode (default: 12)')
     parser.add_argument('--calendar-url', type=str, default=original_calendar_url,
                        help=f'Calendar server URL (default: {original_calendar_url})')
     parser.add_argument('--endpoint-url', type=str, default=original_endpoint_url,
@@ -134,15 +133,18 @@ def main():
     endpoint_url = args.endpoint_url
     image_endpoint = f"{calendar_url}/image"
     hash_endpoint = f"{calendar_url}/image/hash"
-    sleep_hours = args.sleep_hours
+    
+    # Fixed polling interval - always poll every 5 seconds
+    poll_interval = 5
     
     # Determine status endpoint from endpoint URL (assumes same host/port)
     # Convert endpoint_url from http://host:port/upload to http://host:port/calendar_sync/status
     status_endpoint = endpoint_url.replace('/upload', '/calendar_sync/status')
+    trigger_check_endpoint = status_endpoint.replace('/calendar_sync/status', '/calendar_sync/check_trigger')
     
     # Create temp directory for downloaded images
     temp_dir = tempfile.mkdtemp()
-    print(f"Using temp directory: {temp_dir}")
+    log_info(f"[{datetime.now()}] Using temp directory: {temp_dir}")
     
     try:
         # Always do an immediate refresh when starting calendar sync mode
@@ -151,39 +153,48 @@ def main():
         log_info(f"[{datetime.now()}] Image endpoint: {image_endpoint}")
         log_info(f"[{datetime.now()}] Upload endpoint: {endpoint_url}")
         log_info(f"[{datetime.now()}] Status endpoint: {status_endpoint}")
+        log_info(f"[{datetime.now()}] Poll interval: {poll_interval} seconds")
         log_info(f"[{datetime.now()}] Fetching latest calendar image immediately...")
         refresh_display(image_endpoint, endpoint_url, temp_dir, status_endpoint)
         log_info(f"[{datetime.now()}] ===== INITIAL IMAGE FETCHED AND DISPLAYED =====")
         
-        if args.scheduled:
-            print(f"[SCHEDULED MODE] Running with {sleep_hours}-hour intervals...")
-            while True:
-                print(f"[{datetime.now()}] Sleeping for {sleep_hours} hours...")
-                time.sleep(sleep_hours * 3600)
+        # Get initial hash after the refresh
+        last_hash = get_image_hash(hash_endpoint)
+        
+        log_info(f"[{datetime.now()}] Watching for calendar changes with {poll_interval}-second polling...")
+        
+        while True:
+            time.sleep(poll_interval)
+            
+            # Check if manual sync was triggered
+            try:
+                trigger_resp = requests.get(trigger_check_endpoint, timeout=2)
+                if trigger_resp.status_code == 200:
+                    trigger_data = trigger_resp.json()
+                    if trigger_data.get('trigger', False):
+                        log_info(f"[{datetime.now()}] Manual sync triggered! Refreshing immediately...")
+                        refresh_display(image_endpoint, endpoint_url, temp_dir, status_endpoint)
+                        last_hash = get_image_hash(hash_endpoint)
+                        continue  # Skip the normal change detection for this cycle
+            except Exception:
+                # Silently fail - trigger check is optional
+                pass
+            
+            # Poll for hash changes
+            new_hash = get_image_hash(hash_endpoint)
+            if new_hash and new_hash != last_hash:
+                log_info(f"[{datetime.now()}] Change detected! Refreshing...")
                 refresh_display(image_endpoint, endpoint_url, temp_dir, status_endpoint)
-        else:
-            # Default: DEV MODE
-            poll_interval = args.poll_interval
-            print(f"[DEV MODE] Watching for calendar changes with {poll_interval}-second polling...")
-            
-            # Get initial hash after the refresh
-            last_hash = get_image_hash(hash_endpoint)
-            
-            while True:
-                time.sleep(poll_interval)
-                
-                # Poll for hash changes
-                new_hash = get_image_hash(hash_endpoint)
-                if new_hash and new_hash != last_hash:
-                    print(f"[DEV MODE] Change detected at {datetime.now()}! Refreshing...")
-                    refresh_display(image_endpoint, endpoint_url, temp_dir, status_endpoint)
-                    last_hash = new_hash
+                last_hash = new_hash
+            elif new_hash is None:
+                # Hash fetch failed - log warning but keep polling (recoverable)
+                log_info(f"[{datetime.now()}] WARNING: Failed to fetch hash, will retry in {poll_interval}s")
     finally:
         # Clean up temp directory
         try:
             os.rmdir(temp_dir)
         except Exception as e:
-            print(f"Warning: Could not remove temp directory: {e}")
+            log_info(f"[{datetime.now()}] Warning: Could not remove temp directory: {e}")
 
 if __name__ == "__main__":
     main() 

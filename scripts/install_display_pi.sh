@@ -54,12 +54,9 @@ if [ ! -f "$PROJECT_DIR/config.json" ]; then
     cat > "$PROJECT_DIR/config.json" << 'CONFIGEOF'
 {
   "mode": "image_receiver",
-  "calendar_sync": {
-    "calendar_url": "http://localhost:5000",
-    "poll_interval": 10,
-    "sleep_hours": 12,
-    "scheduled": false
-  },
+    "calendar_sync": {
+      "calendar_url": "http://localhost:5000"
+    },
   "image_receiver": {
     "host": "0.0.0.0",
     "port": 8000

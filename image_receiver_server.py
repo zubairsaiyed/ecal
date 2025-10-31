@@ -23,6 +23,7 @@ _calendar_sync_status = {
     'fetching': False,
     'uploading': False
 }
+_manual_sync_trigger = False  # Flag to trigger manual sync
 
 # Helper function to log to stderr (which Flask shows) for important messages
 def log_info(message):
@@ -49,9 +50,7 @@ def load_config():
     return {
         'mode': 'image_receiver',
         'calendar_sync': {
-            'calendar_url': 'http://localhost:5000',
-            'poll_interval': 10,
-            'scheduled': False
+            'calendar_url': 'http://localhost:5000'
         },
         'image_receiver': {
             'host': '0.0.0.0',
@@ -89,15 +88,8 @@ def start_calendar_sync_process():
         endpoint_url = f"http://{endpoint_host}:{receiver_port}/upload"
         calendar_url = sync_config.get('calendar_url', 'http://localhost:5000')
         
-        # Build command
+        # Build command - always polls every 5 seconds
         cmd = [sys.executable, CALENDAR_SYNC_SCRIPT]
-        
-        if sync_config.get('scheduled', False):
-            cmd.append('--scheduled')
-            cmd.extend(['--sleep-hours', str(sync_config.get('sleep_hours', 12))])
-        else:
-            cmd.extend(['--poll-interval', str(sync_config.get('poll_interval', 10))])
-        
         cmd.extend(['--calendar-url', calendar_url])
         cmd.extend(['--endpoint-url', endpoint_url])
         
@@ -607,6 +599,40 @@ def calendar_sync_status():
         
         return jsonify(status)
 
+@app.route('/calendar_sync/trigger', methods=['POST', 'GET'])
+def trigger_calendar_sync():
+    """Trigger a manual calendar sync"""
+    global _manual_sync_trigger
+    
+    with _calendar_sync_lock:
+        # Check if calendar sync is active
+        if not _calendar_sync_process or _calendar_sync_process.poll() is not None:
+            return jsonify({
+                'error': 'Calendar sync is not active',
+                'message': 'Please switch to calendar sync mode first'
+            }), 400
+        
+        # Set the trigger flag
+        _manual_sync_trigger = True
+        log_info(f"[{datetime.now()}] Manual calendar sync triggered")
+        
+        return jsonify({
+            'status': 'success',
+            'message': 'Manual sync triggered. Calendar sync service will refresh shortly.'
+        })
+
+@app.route('/calendar_sync/check_trigger', methods=['GET'])
+def check_manual_sync_trigger():
+    """Check if manual sync was triggered (used by calendar sync service)"""
+    global _manual_sync_trigger
+    
+    with _calendar_sync_lock:
+        if _manual_sync_trigger:
+            _manual_sync_trigger = False  # Clear the flag after reading
+            return jsonify({'trigger': True})
+        else:
+            return jsonify({'trigger': False})
+
 @app.route('/mode/config', methods=['GET', 'POST'])
 def mode_config():
     """Get or update mode-specific configuration"""
@@ -620,12 +646,6 @@ def mode_config():
             if mode_type == 'calendar_sync':
                 if 'calendar_url' in data:
                     config['calendar_sync']['calendar_url'] = data['calendar_url']
-                if 'poll_interval' in data:
-                    config['calendar_sync']['poll_interval'] = int(data['poll_interval'])
-                if 'scheduled' in data:
-                    config['calendar_sync']['scheduled'] = bool(data['scheduled'])
-                if 'sleep_hours' in data:
-                    config['calendar_sync']['sleep_hours'] = int(data['sleep_hours'])
             elif mode_type == 'image_receiver':
                 if 'host' in data:
                     config['image_receiver']['host'] = data['host']

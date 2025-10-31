@@ -57,26 +57,10 @@ DISPLAY_PI_PORT=${DISPLAY_PI_PORT:-8000}
 read -p "Calendar server port [5000]: " CALENDAR_PORT
 CALENDAR_PORT=${CALENDAR_PORT:-5000}
 
-echo ""
-echo "Update Mode:"
-echo "1) Dev Mode - Continuous polling (checks for changes every N seconds)"
-echo "2) Scheduled Mode - Periodic updates (updates every N hours)"
-read -p "Select mode (1 or 2) [2]: " UPDATE_MODE
-UPDATE_MODE=${UPDATE_MODE:-2}
-
-if [ "$UPDATE_MODE" = "1" ]; then
-    read -p "Poll interval in seconds [10]: " POLL_INTERVAL
-    POLL_INTERVAL=${POLL_INTERVAL:-10}
-    SCHEDULED_MODE=""
-    MODE_ARGS="--poll-interval $POLL_INTERVAL"
-    MODE_DESC="Dev mode (polls every $POLL_INTERVAL seconds)"
-else
-    read -p "Update interval in hours [12]: " SLEEP_HOURS
-    SLEEP_HOURS=${SLEEP_HOURS:-12}
-    SCHEDULED_MODE="--scheduled"
-    MODE_ARGS="--scheduled --sleep-hours $SLEEP_HOURS"
-    MODE_DESC="Scheduled mode (updates every $SLEEP_HOURS hours)"
-fi
+# Calendar sync service always polls every 5 seconds
+POLL_INTERVAL=5
+MODE_ARGS=""
+MODE_DESC="Continuous polling (checks for changes every 5 seconds)"
 
 CALENDAR_URL="http://localhost:$CALENDAR_PORT"
 ENDPOINT_URL="http://$DISPLAY_PI_HOST:$DISPLAY_PI_PORT/upload"
@@ -147,7 +131,7 @@ User=$CURRENT_USER
 WorkingDirectory=$PROJECT_DIR
 Environment=PATH=$PROJECT_DIR/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 Environment=PYTHONPATH=$PROJECT_DIR
-ExecStart=$PROJECT_DIR/venv/bin/python3 $PROJECT_DIR/calendar_sync_service.py --calendar-url $CALENDAR_URL --endpoint-url $ENDPOINT_URL $MODE_ARGS
+ExecStart=$PROJECT_DIR/venv/bin/python3 $PROJECT_DIR/calendar_sync_service.py --calendar-url $CALENDAR_URL --endpoint-url $ENDPOINT_URL
 Restart=always
 RestartSec=30
 StandardOutput=append:/var/log/ecal/calendar-sync.log
