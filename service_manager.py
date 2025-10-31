@@ -145,7 +145,6 @@ def start_calendar_sync():
         cmd.extend(['--poll-interval', str(sync_config.get('poll_interval', 10))])
     
     cmd.extend(['--calendar-url', sync_config.get('calendar_url', 'http://localhost:5000')])
-    cmd.extend(['--screenshot-path', sync_config.get('screenshot_path', 'cal.png')])
     
     # Start the calendar sync service
     process = subprocess.Popen(

@@ -103,14 +103,15 @@ python3 service_manager.py switch image_receiver
 
 ### 📅 Calendar Sync Mode
 
-**Purpose:** Automatically monitor a calendar URL and update the display when changes occur
+**Purpose:** Automatically monitor a calendar server and update the display when changes occur
 
 **Features:**
-- Automatic calendar screenshot capture
-- Change detection (only updates when calendar changes)
+- Server-side calendar rendering (calendar_server.py generates screenshots)
+- Change detection via hash polling (only updates when calendar changes)
 - Configurable polling interval
 - Scheduled mode for periodic updates
 - Automatic upload to display
+- Separation of concerns: calendar server handles rendering, client handles sync
 
 **Configuration** (`config.json`):
 ```json
@@ -118,8 +119,6 @@ python3 service_manager.py switch image_receiver
   "mode": "calendar_sync",
   "calendar_sync": {
     "calendar_url": "http://localhost:5000",
-    "screenshot_path": "cal.png",
-    "window_size": "1600,1200",
     "poll_interval": 10,
     "sleep_hours": 12,
     "scheduled": false
@@ -128,11 +127,10 @@ python3 service_manager.py switch image_receiver
 ```
 
 **Configuration Options:**
-- `calendar_url`: URL of the calendar to capture
+- `calendar_url`: URL of the calendar server (should point to calendar_server.py)
 - `poll_interval`: How often to check for changes (seconds, dev mode)
 - `scheduled`: Use scheduled mode instead of continuous polling
 - `sleep_hours`: Interval between updates in scheduled mode (hours)
-- `screenshot_path`: Where to save calendar screenshots
 
 **When to use:**
 - Family calendar display
@@ -151,8 +149,6 @@ The configuration is stored in `config.json`:
   "mode": "image_receiver",
   "calendar_sync": {
     "calendar_url": "http://localhost:5000",
-    "screenshot_path": "cal.png",
-    "window_size": "1600,1200",
     "poll_interval": 10,
     "sleep_hours": 12,
     "scheduled": false
@@ -294,9 +290,10 @@ python3 service_manager.py restart
 - Check firewall settings if accessing remotely
 
 ### Calendar sync not updating
-- Verify calendar URL is accessible: `curl <calendar_url>`
+- Verify calendar server is running: `curl <calendar_url>/image/hash`
 - Check poll interval isn't too long
 - Look at service logs for errors
+- Ensure calendar_server.py is running and accessible at the configured URL
 
 ---
 

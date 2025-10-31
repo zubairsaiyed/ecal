@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding:utf-8 -*-
 
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, send_file
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 import os
 import json
 from datetime import datetime, timedelta, date
 import threading
+import subprocess
+import hashlib
+import tempfile
 
 app = Flask(__name__)
 
@@ -32,6 +35,13 @@ SETTINGS_DEFAULTS = {
 }
 settings_lock = threading.Lock()
 
+# Screenshot cache
+screenshot_cache = {
+    'path': None,
+    'hash': None,
+    'lock': threading.Lock()
+}
+
 def load_settings():
     if not os.path.exists(SETTINGS_FILE):
         print(f"Creating default settings file: {SETTINGS_FILE}")
@@ -53,6 +63,49 @@ def save_settings(settings):
     with settings_lock:
         with open(SETTINGS_FILE, 'w') as f:
             json.dump(settings, f, indent=2)
+
+def generate_calendar_screenshot(width=1600, height=1200):
+    """Generate a screenshot of the calendar page using headless chromium"""
+    print(f"[{datetime.now()}] Generating calendar screenshot...")
+    
+    # Create a temporary file for the screenshot
+    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
+    temp_file.close()
+    screenshot_path = temp_file.name
+    
+    try:
+        # Use headless chromium to take screenshot
+        cmd = [
+            "chromium-browser",
+            "http://localhost:5000",  # Self-referencing URL
+            "--headless",
+            f"--screenshot={screenshot_path}",
+            f"--window-size={width},{height}",
+            "--disable-gpu",
+            "--no-sandbox",
+            "--virtual-time-budget=3000",  # Wait 3 seconds for rendering
+            "--hide-scrollbars"
+        ]
+        
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        
+        if result.returncode != 0:
+            print(f"Screenshot failed: {result.stderr}")
+            return None
+        
+        # Calculate hash of the image
+        with open(screenshot_path, 'rb') as f:
+            image_hash = hashlib.sha256(f.read()).hexdigest()
+        
+        print(f"Screenshot generated: {screenshot_path} (hash: {image_hash[:16]}...)")
+        return screenshot_path, image_hash
+        
+    except subprocess.TimeoutExpired:
+        print("Screenshot generation timed out")
+        return None
+    except Exception as e:
+        print(f"Error generating screenshot: {e}")
+        return None
 
 def get_google_calendar_service():
     """Get authenticated Google Calendar service using service account"""
@@ -226,6 +279,49 @@ def api_settings():
             settings['calendar_colors'] = {}
     save_settings(settings)
     return jsonify({'success': True, 'settings': settings})
+
+@app.route('/image')
+def get_calendar_image():
+    """Generate and serve a screenshot of the calendar"""
+    with screenshot_cache['lock']:
+        # Generate new screenshot
+        result = generate_calendar_screenshot()
+        if not result:
+            return jsonify({'error': 'Failed to generate screenshot'}), 500
+        
+        screenshot_path, image_hash = result
+        
+        # Clean up old cached screenshot if exists
+        if screenshot_cache['path'] and os.path.exists(screenshot_cache['path']):
+            try:
+                os.remove(screenshot_cache['path'])
+            except Exception as e:
+                print(f"Warning: Could not remove old screenshot: {e}")
+        
+        # Update cache
+        screenshot_cache['path'] = screenshot_path
+        screenshot_cache['hash'] = image_hash
+        
+        # Send the image
+        return send_file(screenshot_path, mimetype='image/png')
+
+@app.route('/image/hash')
+def get_calendar_image_hash():
+    """Get the hash of the current calendar image without generating a new one"""
+    with screenshot_cache['lock']:
+        if screenshot_cache['hash']:
+            return jsonify({'hash': screenshot_cache['hash']})
+        else:
+            # Generate a new screenshot to get a hash
+            result = generate_calendar_screenshot()
+            if not result:
+                return jsonify({'error': 'Failed to generate screenshot'}), 500
+            
+            screenshot_path, image_hash = result
+            screenshot_cache['path'] = screenshot_path
+            screenshot_cache['hash'] = image_hash
+            
+            return jsonify({'hash': image_hash})
 
 @app.route('/setup')
 def setup():

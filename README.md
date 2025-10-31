@@ -16,7 +16,7 @@ A standalone script for displaying images on a 13.3-inch e-paper display with au
 A Flask web application for displaying Google Calendar events with customizable themes and settings.
 
 ### 4. Calendar Sync Service (`calendar_sync_service.py`)
-A background service that monitors calendar changes, takes screenshots of the calendar web interface, and uploads them to an endpoint for display on e-paper.
+A background service that polls the calendar server for changes and uploads screenshots to an endpoint for display on e-paper. The calendar server handles rendering via headless Chromium.
 
 ## Features
 
@@ -222,9 +222,8 @@ python3 calendar_sync_service.py
 - **Scheduled Mode**: Use `--scheduled` flag for production mode with configurable intervals
 - **Polling Interval**: `--poll-interval` for dev mode (default: 10 seconds)
 - **Sleep Hours**: `--sleep-hours` for scheduled mode (default: 12 hours)
-- **Calendar URL**: `--calendar-url` to specify calendar web app URL
+- **Calendar URL**: `--calendar-url` to specify calendar server URL
 - **Endpoint URL**: `--endpoint-url` to specify upload endpoint
-- **Screenshot Path**: `--screenshot-path` to specify screenshot file location
 
 **Usage Examples:**
 ```bash
@@ -245,7 +244,8 @@ python3 calendar_sync_service.py --calendar-url http://192.168.1.100:5000 --endp
 ```
 
 **Features:**
-- Automatic screenshot capture of calendar web interface
+- Polls calendar server's `/image/hash` endpoint for change detection
+- Downloads rendered screenshots from `/image` endpoint (server handles Chromium rendering)
 - Change detection with hash comparison (dev mode)
 - Configurable update intervals for both modes
 - Command-line configuration for all settings

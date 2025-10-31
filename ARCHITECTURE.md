@@ -27,12 +27,13 @@ The ECAL Display system uses a **client-server architecture** where resource-int
 ### **Server/Compute Machine** (Desktop or Compute Pi)
 
 **What runs here:**
-- `calendar_sync_service.py` - Generates and uploads calendar screenshots
-- Calendar web application (port 5000)
+- `calendar_server.py` - Calendar web application with screenshot generation endpoint
+- `calendar_sync_service.py` - Polls server for changes and uploads screenshots
 - Image processing/generation
 
 **Resources:**
-- Uses chromium-browser for screenshot rendering
+- `calendar_server.py` uses chromium-browser for screenshot rendering
+- `calendar_sync_service.py` only polls server endpoints (no rendering)
 - Can be any computer with Python and chromium
 - Higher CPU/memory available
 
@@ -84,9 +85,11 @@ User Browser → Upload Form (Display Client:8000) → Image Receiver → E-pape
 ### Calendar Sync (Automated)
 ```
 1. Server: Calendar Web App generates calendar HTML
-2. Server: Calendar Sync Service captures screenshot
-3. Server: Uploads screenshot to Display Client:8000/upload
-4. Display Client: Receives image, optimizes, displays on e-paper
+2. Server: calendar_server.py generates screenshot via /image endpoint
+3. Server: Calendar Sync Service polls /image/hash for changes
+4. Server: When hash changes, downloads image from /image endpoint
+5. Server: Uploads screenshot to Display Client:8000/upload
+6. Display Client: Receives image, optimizes, displays on e-paper
 ```
 
 ---

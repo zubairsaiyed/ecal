@@ -1,41 +1,37 @@
 #!/usr/bin/env python3
-import subprocess
 import time
 import os
 from datetime import datetime
-import hashlib
 import requests
 import sys
 import argparse
+import tempfile
 
 # Configuration
 CALENDAR_URL = "http://localhost:5000"
-SCREENSHOT_PATH = "cal.png"  # You can change this path/filename
-WINDOW_SIZE = "1600,1200"
-IMAGE_SCRIPT = "display_image.py"    # Path to your display_image.py script
+IMAGE_ENDPOINT = f"{CALENDAR_URL}/image"
+HASH_ENDPOINT = f"{CALENDAR_URL}/image/hash"
 SLEEP_HOURS = 12
 
 # ENDPOINT_URL is a placeholder; replace with your actual endpoint
 ENDPOINT_URL = "http://raspberrypi.local:8000/upload"
 
-def take_screenshot(calendar_url, screenshot_path):
-    cmd = [
-        "chromium-browser",
-        calendar_url,
-        "--headless",
-        f"--screenshot={screenshot_path}",
-        f"--window-size={WINDOW_SIZE}",
-        "--disable-gpu",
-        "--no-sandbox",
-        "--virtual-time-budget=2000",
-        "--hide-scrollbars"
-    ]
-    print(f"[{datetime.now()}] Taking screenshot...")
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        print(f"Screenshot failed: {result.stderr}")
-    else:
-        print(f"Screenshot saved to {screenshot_path}")
+def download_image(image_url, local_path):
+    """Download image from the calendar server"""
+    print(f"[{datetime.now()}] Downloading image from {image_url}...")
+    try:
+        response = requests.get(image_url, timeout=30)
+        if response.status_code == 200:
+            with open(local_path, 'wb') as f:
+                f.write(response.content)
+            print(f"Image downloaded to {local_path}")
+            return True
+        else:
+            print(f"Failed to download image: {response.status_code}")
+            return False
+    except Exception as e:
+        print(f"Error downloading image: {e}")
+        return False
 
 def upload_image_to_endpoint(image_path, endpoint_url):
     print(f"[{datetime.now()}] Uploading {image_path} to endpoint {endpoint_url}...")
@@ -50,37 +46,39 @@ def upload_image_to_endpoint(image_path, endpoint_url):
     except Exception as e:
         print(f"Error uploading image: {e}")
 
-def refresh_display(screenshot_path, endpoint_url):
-    upload_image_to_endpoint(screenshot_path, endpoint_url)
-
-def get_calendar_hash(calendar_url):
+def refresh_display(image_url, endpoint_url, temp_dir):
+    """Download image and upload to display endpoint"""
+    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png', dir=temp_dir)
+    temp_file.close()
+    temp_path = temp_file.name
+    
+    if download_image(image_url, temp_path):
+        upload_image_to_endpoint(temp_path, endpoint_url)
+    
+    # Clean up temp file
     try:
-        resp = requests.get(calendar_url)
+        os.remove(temp_path)
+    except Exception:
+        pass
+
+def get_image_hash(hash_url):
+    """Get the hash of the current calendar image from the server"""
+    try:
+        resp = requests.get(hash_url, timeout=10)
         if resp.status_code == 200:
-            return hashlib.sha256(resp.content).hexdigest()
+            data = resp.json()
+            return data.get('hash')
         else:
-            print(f"Failed to fetch calendar: {resp.status_code}")
+            print(f"Failed to fetch hash: {resp.status_code}")
             return None
     except Exception as e:
-        print(f"Error fetching calendar: {e}")
-        return None
-
-def get_image_hash(screenshot_path):
-    try:
-        with open(screenshot_path, 'rb') as f:
-            return hashlib.sha256(f.read()).hexdigest()
-    except Exception as e:
-        print(f"Error hashing screenshot: {e}")
+        print(f"Error fetching hash: {e}")
         return None
 
 def main():
-    # Declare globals at the very beginning
-    global CALENDAR_URL, ENDPOINT_URL, SCREENSHOT_PATH, SLEEP_HOURS
-    
     # Store original values for help text and defaults
     original_calendar_url = CALENDAR_URL
     original_endpoint_url = ENDPOINT_URL
-    original_screenshot_path = SCREENSHOT_PATH
     
     parser = argparse.ArgumentParser(description='Calendar Sync Service - Monitors calendar changes and uploads screenshots')
     parser.add_argument('--scheduled', action='store_true', 
@@ -90,42 +88,55 @@ def main():
     parser.add_argument('--sleep-hours', type=int, default=12,
                        help='Sleep interval in hours for scheduled mode (default: 12)')
     parser.add_argument('--calendar-url', type=str, default=original_calendar_url,
-                       help=f'Calendar URL to monitor (default: {original_calendar_url})')
+                       help=f'Calendar server URL (default: {original_calendar_url})')
     parser.add_argument('--endpoint-url', type=str, default=original_endpoint_url,
                        help=f'Upload endpoint URL (default: {original_endpoint_url})')
-    parser.add_argument('--screenshot-path', type=str, default=original_screenshot_path,
-                       help=f'Screenshot file path (default: {original_screenshot_path})')
     
     args = parser.parse_args()
     
     # Update configuration based on arguments
-    CALENDAR_URL = args.calendar_url
-    ENDPOINT_URL = args.endpoint_url
-    SCREENSHOT_PATH = args.screenshot_path
-    SLEEP_HOURS = args.sleep_hours
+    calendar_url = args.calendar_url
+    endpoint_url = args.endpoint_url
+    image_endpoint = f"{calendar_url}/image"
+    hash_endpoint = f"{calendar_url}/image/hash"
+    sleep_hours = args.sleep_hours
     
-    if args.scheduled:
-        print(f"[SCHEDULED MODE] Running with {SLEEP_HOURS}-hour intervals...")
-        while True:
-            take_screenshot(CALENDAR_URL, SCREENSHOT_PATH)
-            refresh_display(SCREENSHOT_PATH, ENDPOINT_URL)
-            print(f"[{datetime.now()}] Sleeping for {SLEEP_HOURS} hours...")
-            time.sleep(SLEEP_HOURS * 3600)
-    else:
-        # Default: DEV MODE
-        poll_interval = args.poll_interval
-        print(f"[DEV MODE] Watching for calendar changes with {poll_interval}-second polling...")
-        take_screenshot(CALENDAR_URL, SCREENSHOT_PATH)
-        refresh_display(SCREENSHOT_PATH, ENDPOINT_URL)
-        last_hash = get_image_hash(SCREENSHOT_PATH)
-        while True:
-            time.sleep(poll_interval)
-            take_screenshot(CALENDAR_URL, SCREENSHOT_PATH)
-            new_hash = get_image_hash(SCREENSHOT_PATH)
-            if new_hash and new_hash != last_hash:
-                print(f"[DEV MODE] Change detected at {datetime.now()}! Refreshing...")
-                refresh_display(SCREENSHOT_PATH, ENDPOINT_URL)
-                last_hash = new_hash
+    # Create temp directory for downloaded images
+    temp_dir = tempfile.mkdtemp()
+    print(f"Using temp directory: {temp_dir}")
+    
+    try:
+        if args.scheduled:
+            print(f"[SCHEDULED MODE] Running with {sleep_hours}-hour intervals...")
+            while True:
+                refresh_display(image_endpoint, endpoint_url, temp_dir)
+                print(f"[{datetime.now()}] Sleeping for {sleep_hours} hours...")
+                time.sleep(sleep_hours * 3600)
+        else:
+            # Default: DEV MODE
+            poll_interval = args.poll_interval
+            print(f"[DEV MODE] Watching for calendar changes with {poll_interval}-second polling...")
+            
+            # Initial refresh
+            last_hash = get_image_hash(hash_endpoint)
+            if last_hash:
+                refresh_display(image_endpoint, endpoint_url, temp_dir)
+            
+            while True:
+                time.sleep(poll_interval)
+                
+                # Poll for hash changes
+                new_hash = get_image_hash(hash_endpoint)
+                if new_hash and new_hash != last_hash:
+                    print(f"[DEV MODE] Change detected at {datetime.now()}! Refreshing...")
+                    refresh_display(image_endpoint, endpoint_url, temp_dir)
+                    last_hash = new_hash
+    finally:
+        # Clean up temp directory
+        try:
+            os.rmdir(temp_dir)
+        except Exception as e:
+            print(f"Warning: Could not remove temp directory: {e}")
 
 if __name__ == "__main__":
     main() 
