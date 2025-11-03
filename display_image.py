@@ -236,8 +236,8 @@ def main():
                        help='Scale to fill display (may crop image). Default is to fit without cropping.')
     parser.add_argument('--test-rotation', type=int, choices=[0, 90, 180, 270],
                        help='Test rotation: apply specific rotation angle to test display orientation')
-    parser.add_argument('--rotation-mode', type=str, choices=['landscape', 'portrait', 'auto'], default='landscape',
-                       help='Rotation mode: landscape (90° CCW), portrait (no rotation), or auto (smart rotation)')
+    parser.add_argument('--rotation-mode', type=str, choices=['landscape', 'portrait', 'auto', 'rotate90'], default='landscape',
+                       help='Rotation mode: landscape (no rotation), portrait (270° CCW), auto (smart rotation), or rotate90 (90° CW)')
     parser.add_argument('--no-auto-zoom', action='store_true',
                        help='Disable automatic zoom-to-fill after rotation')
     # Keep legacy argument for backwards compatibility
