@@ -76,9 +76,14 @@ def upload_image_to_endpoint(image_path, endpoint_url, status_endpoint=None, max
         try:
             with open(image_path, 'rb') as img_file:
                 files = {'file': (os.path.basename(image_path), img_file, 'image/png')}
+                # Add rotation mode and auto-zoom settings for calendar display
+                data = {
+                    'rotation_mode': 'landscape',
+                    'auto_zoom': 'false'
+                }
                 # Add a custom header to identify this upload as coming from calendar sync
                 headers = {'X-Calendar-Sync-Upload': 'true'}
-                response = requests.post(endpoint_url, files=files, headers=headers, timeout=90)
+                response = requests.post(endpoint_url, files=files, data=data, headers=headers, timeout=90)
             if response.status_code == 200:
                 log_info(f"[{datetime.now()}] Image uploaded successfully.")
                 update_status(status_endpoint, uploading=False, error=None)  # Clear any previous errors
