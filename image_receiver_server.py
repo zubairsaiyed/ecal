@@ -8,6 +8,8 @@ import gc
 import json
 import threading
 import time
+import signal
+import atexit
 from datetime import datetime
 from PIL import Image
 
@@ -145,15 +147,24 @@ def stop_calendar_sync_process():
         log_info(f"[{datetime.now()}] Stopping calendar sync process (PID: {_calendar_sync_process.pid})...")
         
         try:
-            # Try graceful termination first
-            _calendar_sync_process.terminate()
+            # Kill the entire process group to ensure child processes are also terminated
+            import os
+            try:
+                os.killpg(os.getpgid(_calendar_sync_process.pid), signal.SIGTERM)
+                log_info(f"[{datetime.now()}] Sent SIGTERM to process group {os.getpgid(_calendar_sync_process.pid)}")
+            except (ProcessLookupError, PermissionError):
+                # Process group doesn't exist or permission denied, try direct termination
+                _calendar_sync_process.terminate()
             
             # Wait up to 5 seconds for termination
             try:
                 _calendar_sync_process.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 log_info(f"[{datetime.now()}] Process didn't terminate, forcing kill...")
-                _calendar_sync_process.kill()
+                try:
+                    os.killpg(os.getpgid(_calendar_sync_process.pid), signal.SIGKILL)
+                except (ProcessLookupError, PermissionError):
+                    _calendar_sync_process.kill()
                 _calendar_sync_process.wait()
             
             log_info(f"[{datetime.now()}] Calendar sync process stopped")
@@ -681,6 +692,22 @@ def mode_config():
     
     # GET request
     return jsonify(config)
+
+def cleanup_on_exit():
+    """Cleanup function called on exit to ensure subprocesses are terminated"""
+    log_info(f"[{datetime.now()}] Cleanup on exit: stopping calendar sync process...")
+    stop_calendar_sync_process()
+
+def signal_handler(signum, frame):
+    """Handle termination signals to ensure clean shutdown"""
+    log_info(f"[{datetime.now()}] Received signal {signum}, cleaning up...")
+    cleanup_on_exit()
+    sys.exit(0)
+
+# Register cleanup handlers
+atexit.register(cleanup_on_exit)
+signal.signal(signal.SIGTERM, signal_handler)
+signal.signal(signal.SIGINT, signal_handler)
 
 if __name__ == '__main__':
     # Check mode on startup and start calendar sync if needed
