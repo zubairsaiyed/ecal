@@ -120,9 +120,9 @@ def display_image(image_path, zoom_to_fit=False, test_rotation=None, rotation_mo
                     zoom_to_fit = True
             else:
                 print(f"No auto-rotation needed (current orientation maximizes screen usage)")
-        elif rotation_mode == 'landscape':
-            # Landscape mode: apply fixed 270° counterclockwise rotation (same as 90° clockwise)
-            print("Landscape mode: applying 270° counterclockwise rotation")
+        elif rotation_mode == 'portrait':
+            # Portrait mode: apply fixed 270° counterclockwise rotation (same as 90° clockwise)
+            print("Portrait mode: applying 270° counterclockwise rotation")
             Himage = Himage.rotate(270, expand=True)
             print(f"Image size after 270° counterclockwise rotation: {Himage.size}")
             image_was_rotated = True
@@ -131,9 +131,9 @@ def display_image(image_path, zoom_to_fit=False, test_rotation=None, rotation_mo
             if auto_zoom_after_rotation:
                 print(f"  Auto-zoom enabled: image will fill the display frame (may crop)")
                 zoom_to_fit = True
-        elif rotation_mode == 'portrait':
-            # Portrait mode: no rotation
-            print("Portrait mode: no rotation applied")
+        elif rotation_mode == 'landscape':
+            # Landscape mode: no rotation
+            print("Landscape mode: no rotation applied")
         else:
             # Unknown mode, default to landscape for safety
             print(f"Unknown rotation mode '{rotation_mode}', defaulting to landscape (270° CCW)")
