@@ -308,11 +308,11 @@ document.addEventListener('DOMContentLoaded', function() {
             formData.append('file', fileInput.files[0]);
             
             // Add display options
-            const autoRotate = document.getElementById('autoRotate').checked;
+            const rotationMode = document.getElementById('rotationMode').value;
             const autoZoom = document.getElementById('autoZoom').checked;
-            formData.append('auto_rotate', autoRotate);
+            formData.append('rotation_mode', rotationMode);
             formData.append('auto_zoom', autoZoom);
-            console.log('Auto-rotate setting:', autoRotate);
+            console.log('Rotation mode:', rotationMode);
             console.log('Auto-zoom setting:', autoZoom);
             
             // Show loading

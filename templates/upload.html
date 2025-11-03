@@ -55,13 +55,16 @@
                 <div class="display-options">
                     <h3>Display Options</h3>
                     <div class="option-item">
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="autoRotate" checked>
-                            <span class="checkmark"></span>
-                            <span class="label-text">🔄 Auto-rotate to maximize screen usage</span>
+                        <label class="select-label">
+                            <span class="label-text">🔄 Rotation Mode</span>
+                            <select id="rotationMode" class="rotation-select">
+                                <option value="landscape" selected>Landscape (90° CCW)</option>
+                                <option value="portrait">Portrait (No rotation)</option>
+                                <option value="auto">Auto-rotate to fit</option>
+                            </select>
                         </label>
                         <div class="option-description">
-                            Automatically rotate image 90° if it improves screen coverage
+                            Choose how to orient the image on the display
                         </div>
                     </div>
                     

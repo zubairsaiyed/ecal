@@ -13,7 +13,7 @@ import epd13in3E
 import time
 from PIL import Image
 
-def display_image(image_path, zoom_to_fit=False, test_rotation=None, auto_rotate_to_fit=True, auto_zoom_after_rotation=True):
+def display_image(image_path, zoom_to_fit=False, test_rotation=None, rotation_mode='landscape', auto_zoom_after_rotation=True):
     """
     Display an image on the 13.3inch e-paper display
     
@@ -21,16 +21,19 @@ def display_image(image_path, zoom_to_fit=False, test_rotation=None, auto_rotate
         image_path (str): Path to the image file to display
         zoom_to_fit (bool): If True, scale to fill display (may crop). If False, scale to fit (no cropping).
         test_rotation (int, optional): Test rotation angle (0, 90, 180, 270) to test display orientation
-        auto_rotate_to_fit (bool): If True, automatically rotate image 90° if it maximizes screen usage
+        rotation_mode (str): Rotation mode - 'landscape' (90° CCW), 'portrait' (no rotation), or 'auto' (smart rotation)
         auto_zoom_after_rotation (bool): If True, automatically zoom to fill display after rotation
     
     Note:
-        Auto-rotate-to-fit intelligently rotates images to maximize screen usage by comparing
-        the aspect ratios of the image and display, rotating if it improves screen coverage by >5%.
-        Rotation direction is consistent based on orientation:
-        - Portrait images on landscape displays: rotate 270° (counterclockwise)
-        - Landscape images on portrait displays: rotate 90° (clockwise)
-        This ensures images are never displayed upside down.
+        Rotation modes:
+        - 'landscape': Always rotate 90° counterclockwise (default for landscape displays)
+        - 'portrait': No rotation applied (display image as-is)
+        - 'auto': Intelligently rotates images to maximize screen usage by comparing
+                  the aspect ratios of the image and display, rotating if it improves screen coverage by >5%.
+                  Rotation direction is consistent based on orientation:
+                  - Portrait images on landscape displays: rotate 270° (counterclockwise)
+                  - Landscape images on portrait displays: rotate 90° (clockwise)
+                  This ensures images are never displayed upside down.
         When combined with auto_zoom_after_rotation, images are rotated AND zoomed to fill the frame.
     """
     print("13.3inch e-paper (E) Image Display...")
@@ -66,9 +69,9 @@ def display_image(image_path, zoom_to_fit=False, test_rotation=None, auto_rotate
             Himage = Himage.rotate(test_rotation, expand=True)
             print(f"Image size after test rotation: {Himage.size}")
         
-        # Auto-rotate to maximize screen usage with consistent orientation
+        # Apply rotation based on rotation_mode
         image_was_rotated = False
-        if auto_rotate_to_fit:
+        if rotation_mode == 'auto':
             img_width, img_height = Himage.size
             display_width, display_height = epd13in3E.EPD_WIDTH, epd13in3E.EPD_HEIGHT
             
@@ -117,9 +120,23 @@ def display_image(image_path, zoom_to_fit=False, test_rotation=None, auto_rotate
                     zoom_to_fit = True
             else:
                 print(f"No auto-rotation needed (current orientation maximizes screen usage)")
+        elif rotation_mode == 'landscape':
+            # Landscape mode: apply fixed 90° counterclockwise rotation
+            print("Landscape mode: applying 90° counterclockwise rotation")
+            Himage = Himage.rotate(90, expand=True)
+            print(f"Image size after 90° counterclockwise rotation: {Himage.size}")
+            image_was_rotated = True
+            
+            # Auto-zoom after rotation if enabled
+            if auto_zoom_after_rotation:
+                print(f"  Auto-zoom enabled: image will fill the display frame (may crop)")
+                zoom_to_fit = True
+        elif rotation_mode == 'portrait':
+            # Portrait mode: no rotation
+            print("Portrait mode: no rotation applied")
         else:
-            # When auto_rotate is disabled, apply fixed 90° counterclockwise rotation
-            print("Auto-rotate disabled: applying 90° counterclockwise rotation")
+            # Unknown mode, default to landscape for safety
+            print(f"Unknown rotation mode '{rotation_mode}', defaulting to landscape (90° CCW)")
             Himage = Himage.rotate(90, expand=True)
             print(f"Image size after 90° counterclockwise rotation: {Himage.size}")
             image_was_rotated = True
@@ -203,14 +220,23 @@ def main():
                        help='Scale to fill display (may crop image). Default is to fit without cropping.')
     parser.add_argument('--test-rotation', type=int, choices=[0, 90, 180, 270],
                        help='Test rotation: apply specific rotation angle to test display orientation')
-    parser.add_argument('--no-auto-rotate', action='store_true',
-                       help='Disable automatic rotation to maximize screen usage')
+    parser.add_argument('--rotation-mode', type=str, choices=['landscape', 'portrait', 'auto'], default='landscape',
+                       help='Rotation mode: landscape (90° CCW), portrait (no rotation), or auto (smart rotation)')
     parser.add_argument('--no-auto-zoom', action='store_true',
                        help='Disable automatic zoom-to-fill after rotation')
+    # Keep legacy argument for backwards compatibility
+    parser.add_argument('--no-auto-rotate', action='store_true',
+                       help='[DEPRECATED] Use --rotation-mode portrait instead')
     args = parser.parse_args()
     
+    # Handle legacy --no-auto-rotate flag
+    rotation_mode = args.rotation_mode
+    if args.no_auto_rotate:
+        print("Warning: --no-auto-rotate is deprecated. Use --rotation-mode portrait instead.")
+        rotation_mode = 'portrait'
+    
     success = display_image(args.image_path, args.zoom_to_fit, args.test_rotation, 
-                           auto_rotate_to_fit=not args.no_auto_rotate,
+                           rotation_mode=rotation_mode,
                            auto_zoom_after_rotation=not args.no_auto_zoom)
     if success:
         print("Image displayed successfully!")

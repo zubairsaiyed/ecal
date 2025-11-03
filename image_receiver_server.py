@@ -284,9 +284,9 @@ def upload_image():
             traceback.print_exc(file=sys.stderr)
     
     # Get display options
-    auto_rotate = request.form.get('auto_rotate', 'true').lower() == 'true'
+    rotation_mode = request.form.get('rotation_mode', 'landscape')  # landscape, portrait, or auto
     auto_zoom = request.form.get('auto_zoom', 'true').lower() == 'true'
-    print(f"[{datetime.now()}] Display options - Auto-rotate: {auto_rotate}, Auto-zoom: {auto_zoom}")
+    print(f"[{datetime.now()}] Display options - Rotation mode: {rotation_mode}, Auto-zoom: {auto_zoom}")
     
     tmp_path = None
     img = None
@@ -333,8 +333,7 @@ def upload_image():
         
         # Call the display_image.py script with display options
         cmd = [sys.executable, IMAGE_SCRIPT, tmp_path]
-        if not auto_rotate:
-            cmd.append('--no-auto-rotate')
+        cmd.extend(['--rotation-mode', rotation_mode])
         if not auto_zoom:
             cmd.append('--no-auto-zoom')
         
