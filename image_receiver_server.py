@@ -13,6 +13,9 @@ from PIL import Image
 
 app = Flask(__name__)
 
+# Force Flask to reload templates on every request (disable template caching)
+app.config['TEMPLATES_AUTO_RELOAD'] = True
+
 # Global calendar sync process and status
 _calendar_sync_process = None
 _calendar_sync_lock = threading.Lock()
