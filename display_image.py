@@ -139,6 +139,17 @@ def display_image(image_path, zoom_to_fit=False, test_rotation=None, rotation_mo
             if auto_zoom_after_rotation:
                 print(f"  Auto-zoom enabled: image will fill the display frame (may crop)")
                 zoom_to_fit = True
+        elif rotation_mode == 'rotate90':
+            # 90° clockwise rotation (internal use only, e.g., for calendar sync)
+            print("Rotate90 mode: applying 90° clockwise rotation")
+            Himage = Himage.rotate(-90, expand=True)  # Negative for clockwise
+            print(f"Image size after 90° clockwise rotation: {Himage.size}")
+            image_was_rotated = True
+            
+            # Auto-zoom if enabled
+            if auto_zoom_after_rotation:
+                print(f"  Auto-zoom enabled: image will fill the display frame (may crop)")
+                zoom_to_fit = True
         else:
             # Unknown mode, default to landscape for safety
             print(f"Unknown rotation mode '{rotation_mode}', defaulting to landscape (270° CCW)")

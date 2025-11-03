@@ -78,7 +78,7 @@ def upload_image_to_endpoint(image_path, endpoint_url, status_endpoint=None, max
                 files = {'file': (os.path.basename(image_path), img_file, 'image/png')}
                 # Add rotation mode and auto-zoom settings for calendar display
                 data = {
-                    'rotation_mode': 'portrait',
+                    'rotation_mode': 'rotate90',
                     'auto_zoom': 'false'
                 }
                 # Add a custom header to identify this upload as coming from calendar sync
