@@ -140,10 +140,10 @@ def display_image(image_path, zoom_to_fit=False, test_rotation=None, rotation_mo
                 print(f"  Auto-zoom enabled: image will fill the display frame (may crop)")
                 zoom_to_fit = True
         elif rotation_mode == 'rotate90':
-            # 90° clockwise rotation (internal use only, e.g., for calendar sync)
-            print("Rotate90 mode: applying 90° clockwise rotation")
-            Himage = Himage.rotate(-90, expand=True)  # Negative for clockwise
-            print(f"Image size after 90° clockwise rotation: {Himage.size}")
+            # 90° counterclockwise rotation (internal use only, e.g., for calendar sync)
+            print("Rotate90 mode: applying 90° counterclockwise rotation")
+            Himage = Himage.rotate(90, expand=True)  # Positive for counterclockwise
+            print(f"Image size after 90° counterclockwise rotation: {Himage.size}")
             image_was_rotated = True
             
             # Auto-zoom if enabled
