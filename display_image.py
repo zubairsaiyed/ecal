@@ -134,6 +134,11 @@ def display_image(image_path, zoom_to_fit=False, test_rotation=None, rotation_mo
         elif rotation_mode == 'landscape':
             # Landscape mode: no rotation
             print("Landscape mode: no rotation applied")
+            
+            # Auto-zoom if enabled (even without rotation)
+            if auto_zoom_after_rotation:
+                print(f"  Auto-zoom enabled: image will fill the display frame (may crop)")
+                zoom_to_fit = True
         else:
             # Unknown mode, default to landscape for safety
             print(f"Unknown rotation mode '{rotation_mode}', defaulting to landscape (270° CCW)")
