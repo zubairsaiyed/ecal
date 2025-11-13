@@ -18,6 +18,17 @@
     <div class="settings-container">
         <h1>Calendar Settings</h1>
         <form id="settings-form">
+            <label for="calendar_view">Calendar View:</label>
+            <select id="calendar_view" name="calendar_view">
+                <option value="fullcalendar" {% if settings.calendar_view == 'fullcalendar' or not settings.calendar_view %}selected{% endif %}>FullCalendar (Standard)</option>
+                <option value="grid" {% if settings.calendar_view == 'grid' %}selected{% endif %}>Grid (E-paper Optimized)</option>
+            </select>
+            <div style="font-size:0.9em;color:#888;margin-top:8px;">Grid view is optimized for e-paper displays with minimal design and full-width layout.</div>
+            <label for="grid_weeks" id="grid_weeks_label" style="display:{% if settings.calendar_view == 'grid' %}block{% else %}none{% endif %};">
+                Grid Weeks to Display (1-4):
+            </label>
+            <input type="number" id="grid_weeks" name="grid_weeks" min="1" max="4" step="1" value="{{ settings.grid_weeks if settings.grid_weeks is defined else 2 }}" style="display:{% if settings.calendar_view == 'grid' %}block{% else %}none{% endif %};">
+            <div id="grid_weeks_help" style="font-size:0.9em;color:#888;margin-top:8px;display:{% if settings.calendar_view == 'grid' %}block{% else %}none{% endif %};">Number of weeks to display in grid view (1-4 weeks).</div>
             <label for="theme">FullCalendar Theme:</label>
             <select id="theme" name="theme">
                 <optgroup label="Standard Themes">
@@ -105,9 +116,19 @@
         </form>
     </div>
     <script>
+        // Show/hide grid weeks option based on calendar view
+        document.getElementById('calendar_view').addEventListener('change', function() {
+            const isGrid = this.value === 'grid';
+            document.getElementById('grid_weeks_label').style.display = isGrid ? 'block' : 'none';
+            document.getElementById('grid_weeks').style.display = isGrid ? 'block' : 'none';
+            document.getElementById('grid_weeks_help').style.display = isGrid ? 'block' : 'none';
+        });
+
         document.getElementById('settings-form').addEventListener('submit', function(e) {
             e.preventDefault();
             const data = {
+                calendar_view: document.getElementById('calendar_view').value,
+                grid_weeks: parseInt(document.getElementById('grid_weeks').value) || 2,
                 theme: document.getElementById('theme').value,
                 show_weekends: document.getElementById('show_weekends').checked,
                 first_day: parseInt(document.getElementById('first_day').value),

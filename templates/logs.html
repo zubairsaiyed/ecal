@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ECAL Log Viewer</title>
+    <style>
+        body {
+            font-family: 'Courier New', monospace;
+            margin: 0;
+            padding: 20px;
+            background: #1e1e1e;
+            color: #d4d4d4;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: #4ec9b0;
+            margin-bottom: 10px;
+        }
+        .controls {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #252526;
+            border-radius: 5px;
+        }
+        .server-selector {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .server-selector label {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        input[type="text"] {
+            padding: 8px;
+            background: #3c3c3c;
+            border: 1px solid #555;
+            color: #d4d4d4;
+            border-radius: 3px;
+            font-family: monospace;
+            width: 300px;
+        }
+        button {
+            padding: 8px 16px;
+            background: #0e639c;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover {
+            background: #1177bb;
+        }
+        button:disabled {
+            background: #555;
+            cursor: not-allowed;
+        }
+        .status {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 3px;
+            font-size: 12px;
+            margin-left: 10px;
+        }
+        .status.connected {
+            background: #4caf50;
+            color: white;
+        }
+        .status.disconnected {
+            background: #f44336;
+            color: white;
+        }
+        .status.connecting {
+            background: #ff9800;
+            color: white;
+        }
+        .log-container {
+            background: #252526;
+            border-radius: 5px;
+            padding: 15px;
+            height: 600px;
+            overflow-y: auto;
+            border: 1px solid #3c3c3c;
+        }
+        .log-entry {
+            padding: 4px 0;
+            border-bottom: 1px solid #2d2d30;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+        .log-entry:last-child {
+            border-bottom: none;
+        }
+        .log-timestamp {
+            color: #858585;
+            margin-right: 10px;
+        }
+        .log-level {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 11px;
+            font-weight: bold;
+            margin-right: 10px;
+            min-width: 50px;
+            text-align: center;
+        }
+        .log-level.INFO {
+            background: #0e639c;
+            color: white;
+        }
+        .log-level.WARNING {
+            background: #ff9800;
+            color: white;
+        }
+        .log-level.ERROR {
+            background: #f44336;
+            color: white;
+        }
+        .log-level.DEBUG {
+            background: #858585;
+            color: white;
+        }
+        .log-message {
+            color: #d4d4d4;
+        }
+        .empty-state {
+            text-align: center;
+            color: #858585;
+            padding: 40px;
+        }
+        .stats {
+            display: flex;
+            gap: 20px;
+            margin-top: 10px;
+            font-size: 12px;
+            color: #858585;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>ECAL Log Viewer</h1>
+        <div class="controls">
+            <div class="server-selector">
+                <label>
+                    <input type="radio" name="server" value="client" checked>
+                    Display Client (Port 8000)
+                </label>
+                <label>
+                    <input type="radio" name="server" value="server">
+                    Calendar Server (Port 5000)
+                </label>
+                <label>
+                    Custom URL:
+                    <input type="text" id="customUrl" placeholder="http://192.168.1.100:8000">
+                </label>
+                <button id="connectBtn" onclick="connect()">Connect</button>
+                <button id="disconnectBtn" onclick="disconnect()" disabled>Disconnect</button>
+                <span id="status" class="status disconnected">Disconnected</span>
+            </div>
+            <div class="stats">
+                <span>Logs loaded: <span id="logCount">0</span></span>
+                <span>Streaming: <span id="streamingStatus">No</span></span>
+            </div>
+        </div>
+        <div class="log-container" id="logContainer">
+            <div class="empty-state">Select a server and click Connect to view logs</div>
+        </div>
+    </div>
+
+    <script>
+        let eventSource = null;
+        let currentUrl = null;
+        let logs = [];
+
+        function getServerUrl() {
+            const customUrl = document.getElementById('customUrl').value.trim();
+            if (customUrl) {
+                return customUrl;
+            }
+            const server = document.querySelector('input[name="server"]:checked').value;
+            if (server === 'client') {
+                return window.location.origin.replace(':5000', ':8000') || 'http://localhost:8000';
+            } else {
+                return window.location.origin.replace(':8000', ':5000') || 'http://localhost:5000';
+            }
+        }
+
+        async function connect() {
+            const url = getServerUrl();
+            currentUrl = url;
+            
+            // Update UI
+            document.getElementById('connectBtn').disabled = true;
+            document.getElementById('disconnectBtn').disabled = false;
+            document.getElementById('status').textContent = 'Connecting...';
+            document.getElementById('status').className = 'status connecting';
+            document.getElementById('logContainer').innerHTML = '<div class="empty-state">Loading logs...</div>';
+
+            try {
+                // First, fetch recent logs
+                const response = await fetch(`${url}/logs?limit=200`);
+                const data = await response.json();
+                logs = data.logs || [];
+                renderLogs();
+                document.getElementById('logCount').textContent = logs.length;
+
+                // Then start streaming
+                eventSource = new EventSource(`${url}/logs/stream`);
+                
+                eventSource.onopen = function() {
+                    document.getElementById('status').textContent = 'Connected';
+                    document.getElementById('status').className = 'status connected';
+                    document.getElementById('streamingStatus').textContent = 'Yes';
+                };
+
+                eventSource.onmessage = function(event) {
+                    const data = JSON.parse(event.data);
+                    if (data.type === 'log') {
+                        logs.push(data.data);
+                        if (logs.length > 1000) {
+                            logs.shift(); // Keep only last 1000 logs
+                        }
+                        renderLogs();
+                        document.getElementById('logCount').textContent = logs.length;
+                    } else if (data.type === 'keepalive') {
+                        // Keepalive - do nothing
+                    } else if (data.type === 'connected') {
+                        console.log('Log stream connected');
+                    }
+                };
+
+                eventSource.onerror = function(error) {
+                    console.error('EventSource error:', error);
+                    document.getElementById('status').textContent = 'Error';
+                    document.getElementById('status').className = 'status disconnected';
+                    document.getElementById('streamingStatus').textContent = 'No';
+                };
+            } catch (error) {
+                console.error('Failed to connect:', error);
+                document.getElementById('status').textContent = 'Connection Failed';
+                document.getElementById('status').className = 'status disconnected';
+                document.getElementById('logContainer').innerHTML = `<div class="empty-state">Error: ${error.message}</div>`;
+                document.getElementById('connectBtn').disabled = false;
+                document.getElementById('disconnectBtn').disabled = true;
+            }
+        }
+
+        function disconnect() {
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
+            }
+            document.getElementById('connectBtn').disabled = false;
+            document.getElementById('disconnectBtn').disabled = true;
+            document.getElementById('status').textContent = 'Disconnected';
+            document.getElementById('status').className = 'status disconnected';
+            document.getElementById('streamingStatus').textContent = 'No';
+        }
+
+        function renderLogs() {
+            const container = document.getElementById('logContainer');
+            if (logs.length === 0) {
+                container.innerHTML = '<div class="empty-state">No logs available</div>';
+                return;
+            }
+
+            container.innerHTML = logs.map(log => {
+                const timestamp = new Date(log.timestamp).toLocaleTimeString();
+                return `
+                    <div class="log-entry">
+                        <span class="log-timestamp">${timestamp}</span>
+                        <span class="log-level ${log.level}">${log.level}</span>
+                        <span class="log-message">${escapeHtml(log.message)}</span>
+                    </div>
+                `;
+            }).join('');
+            
+            // Auto-scroll to bottom
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Auto-connect on page load if URL is provided
+        window.addEventListener('load', function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const server = urlParams.get('server');
+            const url = urlParams.get('url');
+            
+            if (server) {
+                document.querySelector(`input[value="${server}"]`).checked = true;
+            }
+            if (url) {
+                document.getElementById('customUrl').value = url;
+            }
+            
+            // Auto-connect if URL is provided
+            if (url || server) {
+                setTimeout(connect, 500);
+            }
+        });
+    </script>
+</body>
+</html>
+

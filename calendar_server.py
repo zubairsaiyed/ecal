@@ -129,7 +129,9 @@ SETTINGS_DEFAULTS = {
     'wrap_event_titles': True,
     'color_event_text': True,
     'calendar_ids': '',
-    'calendar_colors': {}
+    'calendar_colors': {},
+    'calendar_view': 'fullcalendar',  # 'fullcalendar' or 'grid'
+    'grid_weeks': 2  # Number of weeks to display in grid view (1-4)
 }
 settings_lock = threading.Lock()
 
@@ -338,7 +340,12 @@ def fetch_calendar_events(service, calendar_ids=None, max_results=50):
 def index():
     """Main route - serve the calendar page"""
     settings = load_settings()
-    return render_template('calendar.html', settings=settings)
+    calendar_view = settings.get('calendar_view', 'fullcalendar')
+    
+    if calendar_view == 'grid':
+        return render_template('calendar_grid.html', settings=settings)
+    else:
+        return render_template('calendar.html', settings=settings)
 
 @app.route('/api/events')
 def get_events():
@@ -394,6 +401,9 @@ def api_settings():
                 settings['calendar_colors'] = data['calendar_colors']
         except Exception:
             settings['calendar_colors'] = {}
+    # Validate grid_weeks
+    if 'grid_weeks' in settings:
+        settings['grid_weeks'] = max(1, min(4, int(settings['grid_weeks'])))
     save_settings(settings)
     return jsonify({'success': True, 'settings': settings})
 
