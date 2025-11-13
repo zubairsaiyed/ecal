@@ -76,7 +76,7 @@
         .calendar-grid {
             display: grid;
             grid-template-columns: repeat(7, 1fr);
-            grid-template-rows: repeat(var(--weeks-count), minmax(0, 1fr));
+            grid-auto-rows: minmax(min-content, 1fr);
             gap: 1px;
             background: #000000;
             border: none;
@@ -91,8 +91,8 @@
 
         .day-cell {
             background: #ffffff;
-            min-height: 0;
-            height: 100%;
+            min-height: min-content;
+            height: auto;
             padding: 12px;
             border: none;
             position: relative;
@@ -137,9 +137,9 @@
             display: flex;
             flex-direction: column;
             gap: 6px;
-            flex: 1;
+            flex: 0 1 auto;
             min-height: 0;
-            overflow-y: auto;
+            overflow-y: visible;
         }
 
         .event {
@@ -484,6 +484,79 @@
             document.documentElement.style.setProperty('--weeks-count', GRID_WEEKS);
         }
 
+        // Adjust row heights based on content, prioritizing first rows
+        function adjustRowHeights() {
+            const grid = document.getElementById('calendar-grid');
+            if (!grid) return;
+            
+            const rows = [];
+            const totalRows = GRID_WEEKS;
+            
+            // Group day cells by row (week)
+            for (let i = 0; i < totalRows; i++) {
+                const rowCells = [];
+                for (let j = 0; j < 7; j++) {
+                    const cellIndex = i * 7 + j;
+                    const cell = grid.children[cellIndex];
+                    if (cell) {
+                        rowCells.push(cell);
+                    }
+                }
+                if (rowCells.length > 0) {
+                    rows.push(rowCells);
+                }
+            }
+            
+            // Calculate minimum height needed for each row based on content
+            const rowMinHeights = rows.map(rowCells => {
+                let maxHeight = 0;
+                rowCells.forEach(cell => {
+                    // Temporarily set height to auto to measure content
+                    const originalHeight = cell.style.height;
+                    cell.style.height = 'auto';
+                    maxHeight = Math.max(maxHeight, cell.scrollHeight);
+                    cell.style.height = originalHeight;
+                });
+                return maxHeight;
+            });
+            
+            // Calculate total minimum height needed
+            const totalMinHeight = rowMinHeights.reduce((sum, h) => sum + h, 0);
+            const availableHeight = grid.offsetHeight;
+            
+            // If we have extra space, distribute it, but prioritize earlier rows
+            if (availableHeight > totalMinHeight) {
+                const extraSpace = availableHeight - totalMinHeight;
+                // Give more space to earlier rows (exponential distribution)
+                const rowHeights = rowMinHeights.map((minHeight, index) => {
+                    // Earlier rows get more of the extra space
+                    const priority = Math.pow(0.7, index); // 1.0, 0.7, 0.49, 0.34...
+                    return minHeight + (extraSpace * priority / totalRows);
+                });
+                
+                // Normalize to ensure total equals availableHeight
+                const totalAllocated = rowHeights.reduce((sum, h) => sum + h, 0);
+                const scaleFactor = availableHeight / totalAllocated;
+                const finalHeights = rowHeights.map(h => h * scaleFactor);
+                
+                // Apply heights to rows
+                rows.forEach((rowCells, rowIndex) => {
+                    const rowHeight = finalHeights[rowIndex];
+                    rowCells.forEach(cell => {
+                        cell.style.height = `${rowHeight}px`;
+                    });
+                });
+            } else {
+                // Not enough space - use minimum heights
+                rows.forEach((rowCells, rowIndex) => {
+                    const rowHeight = rowMinHeights[rowIndex];
+                    rowCells.forEach(cell => {
+                        cell.style.height = `${rowHeight}px`;
+                    });
+                });
+            }
+        }
+
         // Fetch events and render
         fetch('/api/events')
             .then(response => response.json())
@@ -491,12 +564,15 @@
                 setWeeksVariable();
                 renderWeekdays();
                 renderCalendar(events);
+                // Adjust row heights after rendering
+                setTimeout(adjustRowHeights, 100);
             })
             .catch(error => {
                 console.error('Error fetching events:', error);
                 setWeeksVariable();
                 renderWeekdays();
                 renderCalendar([]);
+                setTimeout(adjustRowHeights, 100);
             });
     </script>
 </body>
