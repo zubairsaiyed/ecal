@@ -71,6 +71,8 @@
             font-size: 24px;
             text-transform: uppercase;
             letter-spacing: 0.5px;
+            transform: scaleY(0.88); /* Compress vertically to compensate for stretching */
+            transform-origin: center;
         }
 
         .calendar-grid {
@@ -128,6 +130,8 @@
             margin-bottom: 12px;
             padding-bottom: 6px;
             border-bottom: 2px solid #e0e0e0;
+            transform: scaleY(0.88); /* Compress vertically to compensate for stretching */
+            transform-origin: top;
         }
 
         .day-cell.today .day-number {
@@ -151,6 +155,8 @@
             background: #ffffff;
             cursor: default;
             line-height: 1.4;
+            transform: scaleY(0.88); /* Compress vertically to compensate for stretching */
+            transform-origin: top;
         }
 
         .event.past {
@@ -169,6 +175,9 @@
             color: #000000;
             margin-right: 8px;
             font-size: 20px;
+            transform: scaleY(0.88); /* Compress vertically to compensate for stretching */
+            transform-origin: center;
+            display: inline-block;
         }
 
         .event-title {
@@ -181,6 +190,8 @@
             font-size: 20px;
             word-wrap: break-word;
             word-break: break-word;
+            transform: scaleY(0.88); /* Compress vertically to compensate for stretching */
+            transform-origin: top;
         }
 
         .event.all-day {
@@ -197,6 +208,8 @@
             color: #666666;
             padding: 4px 12px;
             font-style: italic;
+            transform: scaleY(0.88); /* Compress vertically to compensate for stretching */
+            transform-origin: center;
         }
 
         /* Responsive adjustments for e-paper displays */
