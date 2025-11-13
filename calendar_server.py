@@ -62,6 +62,7 @@ settings_lock = threading.Lock()
 screenshot_cache = {
     'path': None,
     'hash': None,
+    'events_hash': None,  # Hash of calendar events to detect changes
     'lock': threading.Lock()
 }
 
@@ -143,6 +144,24 @@ def get_google_calendar_service():
         return service, None
     except Exception as e:
         return None, f"Error building service: {str(e)}"
+
+def compute_events_hash(events):
+    """Compute a hash of calendar events to detect changes"""
+    # Create a deterministic representation of events for hashing
+    # Sort by start time to ensure consistent ordering
+    events_data = []
+    for event in sorted(events, key=lambda e: (e.get('start', ''), e.get('title', ''))):
+        events_data.append({
+            'title': event.get('title', ''),
+            'start': event.get('start', ''),
+            'end': event.get('end', ''),
+            'description': event.get('description', ''),
+            'location': event.get('location', ''),
+            'calendarId': event.get('calendarId', '')
+        })
+    # Serialize to JSON string and hash it
+    events_json = json.dumps(events_data, sort_keys=True)
+    return hashlib.sha256(events_json.encode('utf-8')).hexdigest()
 
 def fetch_calendar_events(service, calendar_ids=None, max_results=50):
     """Fetch events from one or more Google Calendars for 6 weeks from the start of the current week"""
@@ -314,6 +333,13 @@ def get_calendar_image():
         
         screenshot_path, image_hash = result
         
+        # Update events hash when generating screenshot
+        service, error = get_google_calendar_service()
+        if not error and service:
+            events, _ = fetch_calendar_events(service)
+            if events:
+                screenshot_cache['events_hash'] = compute_events_hash(events)
+        
         # Clean up old cached screenshot if exists
         if screenshot_cache['path'] and os.path.exists(screenshot_cache['path']):
             try:
@@ -330,21 +356,62 @@ def get_calendar_image():
 
 @app.route('/image/hash')
 def get_calendar_image_hash():
-    """Get the hash of the current calendar image without generating a new one"""
+    """Get the hash of the current calendar image - only regenerates if events changed"""
     with screenshot_cache['lock']:
-        if screenshot_cache['hash']:
-            return jsonify({'hash': screenshot_cache['hash']})
+        # Check if calendar events have changed by comparing event hashes
+        service, error = get_google_calendar_service()
+        if error or not service:
+            # If we can't get the service, return cached hash if available
+            if screenshot_cache['hash']:
+                return jsonify({'hash': screenshot_cache['hash']})
+            return jsonify({'error': 'Failed to get calendar service'}), 500
+        
+        # Fetch current events and compute their hash
+        events, fetch_error = fetch_calendar_events(service)
+        if fetch_error:
+            # If fetch fails, return cached hash if available
+            if screenshot_cache['hash']:
+                log_info(f"Warning: Failed to fetch events: {fetch_error}, using cached hash")
+                return jsonify({'hash': screenshot_cache['hash']})
+            return jsonify({'error': fetch_error}), 500
+        
+        current_events_hash = compute_events_hash(events)
+        
+        # Only regenerate screenshot if events have changed
+        if screenshot_cache['events_hash'] == current_events_hash:
+            # Events haven't changed, return cached hash
+            if screenshot_cache['hash']:
+                return jsonify({'hash': screenshot_cache['hash']})
+            # No cached hash, need to generate one
+            log_info("No cached hash available, generating screenshot...")
         else:
-            # Generate a new screenshot to get a hash
-            result = generate_calendar_screenshot()
-            if not result:
-                return jsonify({'error': 'Failed to generate screenshot'}), 500
-            
-            screenshot_path, image_hash = result
-            screenshot_cache['path'] = screenshot_path
-            screenshot_cache['hash'] = image_hash
-            
-            return jsonify({'hash': image_hash})
+            # Events have changed, regenerate screenshot
+            log_info(f"Calendar events changed (old hash: {screenshot_cache['events_hash'][:16] if screenshot_cache['events_hash'] else 'none'}..., new hash: {current_events_hash[:16]}...), regenerating screenshot...")
+        
+        # Generate new screenshot
+        result = generate_calendar_screenshot()
+        if not result:
+            # If generation fails, return cached hash if available
+            if screenshot_cache['hash']:
+                log_info("Warning: Screenshot generation failed, using cached hash")
+                return jsonify({'hash': screenshot_cache['hash']})
+            return jsonify({'error': 'Failed to generate screenshot'}), 500
+        
+        screenshot_path, image_hash = result
+        
+        # Clean up old cached screenshot if exists
+        if screenshot_cache['path'] and os.path.exists(screenshot_cache['path']):
+            try:
+                os.remove(screenshot_cache['path'])
+            except Exception as e:
+                log_info(f"Warning: Could not remove old screenshot: {e}")
+        
+        # Update cache with new screenshot and events hash
+        screenshot_cache['path'] = screenshot_path
+        screenshot_cache['hash'] = image_hash
+        screenshot_cache['events_hash'] = current_events_hash
+        
+        return jsonify({'hash': image_hash})
 
 @app.route('/setup')
 def setup():
