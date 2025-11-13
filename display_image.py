@@ -192,15 +192,29 @@ def display_image(image_path, zoom_to_fit=False, test_rotation=None, rotation_mo
             Himage = Himage.resize((new_width, new_height), Image.Resampling.LANCZOS)
             
             if zoom_to_fit:
-                # For zoom-to-fit, crop the image to fill the display
+                # For zoom-to-fit, crop the image to fill the display exactly
                 # Calculate crop box to center the image
                 crop_x = max(0, (new_width - epd13in3E.EPD_WIDTH) // 2)
                 crop_y = max(0, (new_height - epd13in3E.EPD_HEIGHT) // 2)
-                crop_width = min(epd13in3E.EPD_WIDTH, new_width)
-                crop_height = min(epd13in3E.EPD_HEIGHT, new_height)
+                # Ensure we crop to exactly the display dimensions
+                crop_width = epd13in3E.EPD_WIDTH
+                crop_height = epd13in3E.EPD_HEIGHT
+                
+                # Make sure we don't go out of bounds
+                if crop_x + crop_width > new_width:
+                    crop_x = new_width - crop_width
+                if crop_y + crop_height > new_height:
+                    crop_y = new_height - crop_height
+                crop_x = max(0, crop_x)
+                crop_y = max(0, crop_y)
                 
                 Himage = Himage.crop((crop_x, crop_y, crop_x + crop_width, crop_y + crop_height))
                 print(f"Cropped to: {Himage.size}")
+                
+                # If the cropped image is still not exactly the right size, resize it
+                if Himage.size != (epd13in3E.EPD_WIDTH, epd13in3E.EPD_HEIGHT):
+                    Himage = Himage.resize((epd13in3E.EPD_WIDTH, epd13in3E.EPD_HEIGHT), Image.Resampling.LANCZOS)
+                    print(f"Resized to exact display size: {Himage.size}")
             else:
                 # For fit-without-crop, center the image on white background
                 final_image = Image.new('RGB', (epd13in3E.EPD_WIDTH, epd13in3E.EPD_HEIGHT), (255, 255, 255))

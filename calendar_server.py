@@ -176,16 +176,19 @@ def generate_calendar_screenshot(width=1600, height=1200):
     
     try:
         # Use headless chromium to take screenshot
+        # Use --window-size to set viewport, and ensure full page capture
         cmd = [
             "chromium-browser",
             "http://localhost:5000",  # Self-referencing URL
             "--headless",
             f"--screenshot={screenshot_path}",
             f"--window-size={width},{height}",
+            f"--force-device-scale-factor=1",
             "--disable-gpu",
             "--no-sandbox",
             "--virtual-time-budget=3000",  # Wait 3 seconds for rendering
-            "--hide-scrollbars"
+            "--hide-scrollbars",
+            "--disable-web-security"
         ]
         
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)

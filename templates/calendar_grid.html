@@ -11,7 +11,7 @@
             box-sizing: border-box;
         }
 
-        body {
+        html, body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
             background: #ffffff;
             color: #000000;
@@ -19,6 +19,8 @@
             margin: 0;
             line-height: 1.4;
             overflow: hidden;
+            width: 100%;
+            height: 100%;
         }
 
         .calendar-container {
@@ -27,6 +29,7 @@
             padding: 0;
             width: 100vw;
             height: 100vh;
+            min-height: 100vh;
             display: flex;
             flex-direction: column;
         }
@@ -82,12 +85,13 @@
         }
 
         .day-cell.past {
-            background: #fafafa;
-            opacity: 0.5;
+            background: #f8f8f8;
         }
 
         .day-cell.past .day-number {
-            color: #999999;
+            color: #cccccc;
+            font-weight: 400;
+            border-bottom-color: #e8e8e8;
         }
 
         .day-cell.today {
@@ -128,12 +132,14 @@
         }
 
         .event.past {
-            opacity: 0.4;
+            background: #f8f8f8;
+            border-left-color: #cccccc;
         }
 
         .event.past .event-time,
         .event.past .event-title {
-            color: #666666;
+            color: #aaaaaa;
+            font-weight: 400;
         }
 
         .event-time {
