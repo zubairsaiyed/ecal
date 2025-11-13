@@ -76,15 +76,16 @@
         .calendar-grid {
             display: grid;
             grid-template-columns: repeat(7, 1fr);
-            grid-auto-rows: minmax(min-content, 1fr);
+            grid-auto-rows: auto;
             gap: 1px;
             background: #000000;
             border: none;
             margin: 0;
             padding: 0;
-            flex: 1 1 auto;
+            flex: 1 1 0;
             min-height: 0;
             height: calc(100vh - 60px);
+            max-height: calc(100vh - 60px);
             overflow: hidden;
             align-content: start;
         }
@@ -520,24 +521,42 @@
                 return maxHeight;
             });
             
-            // Calculate total minimum height needed
-            const totalMinHeight = rowMinHeights.reduce((sum, h) => sum + h, 0);
+            // Calculate total minimum height needed (including gaps between rows)
+            const gapSize = 1; // 1px gap between rows
+            const totalGaps = (totalRows - 1) * gapSize;
+            const totalMinHeight = rowMinHeights.reduce((sum, h) => sum + h, 0) + totalGaps;
             const availableHeight = grid.offsetHeight;
             
-            // If we have extra space, distribute it, but prioritize earlier rows
+            // Always distribute space to fill the entire available height
             if (availableHeight > totalMinHeight) {
                 const extraSpace = availableHeight - totalMinHeight;
-                // Give more space to earlier rows (exponential distribution)
+                
+                // Calculate priority weights for each row (earlier rows get more)
+                const weights = rows.map((_, index) => Math.pow(0.7, index));
+                const totalWeight = weights.reduce((sum, w) => sum + w, 0);
+                
+                // Distribute extra space proportionally based on weights
                 const rowHeights = rowMinHeights.map((minHeight, index) => {
-                    // Earlier rows get more of the extra space
-                    const priority = Math.pow(0.7, index); // 1.0, 0.7, 0.49, 0.34...
-                    return minHeight + (extraSpace * priority / totalRows);
+                    const weight = weights[index];
+                    const extraForThisRow = (extraSpace * weight) / totalWeight;
+                    return minHeight + extraForThisRow;
                 });
                 
-                // Normalize to ensure total equals availableHeight
-                const totalAllocated = rowHeights.reduce((sum, h) => sum + h, 0);
-                const scaleFactor = availableHeight / totalAllocated;
+                // Normalize to ensure total equals availableHeight exactly (accounting for gaps)
+                const totalRowHeights = rowHeights.reduce((sum, h) => sum + h, 0);
+                const totalWithGaps = totalRowHeights + totalGaps;
+                const scaleFactor = availableHeight / totalWithGaps;
                 const finalHeights = rowHeights.map(h => h * scaleFactor);
+                
+                // Verify the total matches exactly
+                const finalTotal = finalHeights.reduce((sum, h) => sum + h, 0) + totalGaps;
+                if (Math.abs(finalTotal - availableHeight) > 0.1) {
+                    // Adjust to account for rounding errors
+                    const adjustment = (availableHeight - finalTotal) / totalRows;
+                    finalHeights.forEach((h, i) => {
+                        finalHeights[i] = h + adjustment;
+                    });
+                }
                 
                 // Apply heights to rows
                 rows.forEach((rowCells, rowIndex) => {
@@ -547,14 +566,23 @@
                     });
                 });
             } else {
-                // Not enough space - use minimum heights
+                // Not enough space - scale down proportionally to fit
+                const scaleFactor = (availableHeight - totalGaps) / (totalMinHeight - totalGaps);
                 rows.forEach((rowCells, rowIndex) => {
-                    const rowHeight = rowMinHeights[rowIndex];
+                    const rowHeight = rowMinHeights[rowIndex] * scaleFactor;
                     rowCells.forEach(cell => {
                         cell.style.height = `${rowHeight}px`;
                     });
                 });
             }
+        }
+
+        // Signal that rendering is complete (for screenshot capture)
+        function signalRenderComplete() {
+            // Add a class to body to signal rendering is done
+            document.body.classList.add('render-complete');
+            // Also set a data attribute
+            document.body.setAttribute('data-render-complete', 'true');
         }
 
         // Fetch events and render
@@ -565,14 +593,21 @@
                 renderWeekdays();
                 renderCalendar(events);
                 // Adjust row heights after rendering
-                setTimeout(adjustRowHeights, 100);
+                setTimeout(() => {
+                    adjustRowHeights();
+                    // Signal completion after a brief delay to ensure layout is stable
+                    setTimeout(signalRenderComplete, 50);
+                }, 100);
             })
             .catch(error => {
                 console.error('Error fetching events:', error);
                 setWeeksVariable();
                 renderWeekdays();
                 renderCalendar([]);
-                setTimeout(adjustRowHeights, 100);
+                setTimeout(() => {
+                    adjustRowHeights();
+                    setTimeout(signalRenderComplete, 50);
+                }, 100);
             });
     </script>
 </body>

@@ -189,7 +189,7 @@ def generate_calendar_screenshot(width=1600, height=1200):
             f"--force-device-scale-factor=1",
             "--disable-gpu",
             "--no-sandbox",
-            "--virtual-time-budget=5000",  # Wait 5 seconds for rendering
+            "--virtual-time-budget=8000",  # Wait 8 seconds for rendering and JS to complete
             "--hide-scrollbars",
             "--disable-web-security",
             "--run-all-compositor-stages-before-draw",
@@ -197,7 +197,8 @@ def generate_calendar_screenshot(width=1600, height=1200):
             "--disable-backgrounding-occluded-windows",
             "--disable-renderer-backgrounding",
             "--disable-features=TranslateUI",
-            "--disable-ipc-flooding-protection"
+            "--disable-ipc-flooding-protection",
+            "--disable-extensions"
         ]
         
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
