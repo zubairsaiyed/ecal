@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, Response, stream_with_context
 import os
 import tempfile
 import subprocess
@@ -10,6 +10,7 @@ import threading
 import time
 import signal
 import atexit
+import queue
 from datetime import datetime
 from PIL import Image
 
@@ -17,6 +18,60 @@ app = Flask(__name__)
 
 # Force Flask to reload templates on every request (disable template caching)
 app.config['TEMPLATES_AUTO_RELOAD'] = True
+
+# Log buffer for streaming logs via HTTP
+class LogBuffer:
+    """In-memory ring buffer for storing recent logs"""
+    def __init__(self, max_size=1000):
+        self.max_size = max_size
+        self.logs = []
+        self.lock = threading.Lock()
+        self.subscribers = []  # For SSE streaming
+    
+    def add_log(self, level, message, timestamp=None):
+        """Add a log entry"""
+        if timestamp is None:
+            timestamp = datetime.now().isoformat()
+        
+        log_entry = {
+            'timestamp': timestamp,
+            'level': level,
+            'message': message
+        }
+        
+        with self.lock:
+            self.logs.append(log_entry)
+            if len(self.logs) > self.max_size:
+                self.logs.pop(0)
+            
+            # Notify SSE subscribers
+            for subscriber_queue in self.subscribers[:]:  # Copy list to avoid modification during iteration
+                try:
+                    subscriber_queue.put(log_entry, block=False)
+                except queue.Full:
+                    # Remove subscriber if queue is full (client disconnected)
+                    self.subscribers.remove(subscriber_queue)
+    
+    def get_logs(self, limit=100):
+        """Get recent logs"""
+        with self.lock:
+            return self.logs[-limit:]
+    
+    def subscribe(self):
+        """Subscribe to new logs (returns a queue for SSE streaming)"""
+        subscriber_queue = queue.Queue(maxsize=100)
+        with self.lock:
+            self.subscribers.append(subscriber_queue)
+        return subscriber_queue
+    
+    def unsubscribe(self, subscriber_queue):
+        """Unsubscribe from log updates"""
+        with self.lock:
+            if subscriber_queue in self.subscribers:
+                self.subscribers.remove(subscriber_queue)
+
+# Global log buffer
+log_buffer = LogBuffer(max_size=1000)
 
 # Global calendar sync process and status
 _calendar_sync_process = None
@@ -33,9 +88,11 @@ _manual_sync_trigger = False  # Flag to trigger manual sync
 
 # Helper function to log to stderr (which Flask shows) for important messages
 def log_info(message):
-    """Log to stderr (which Flask shows in logs)"""
+    """Log to stderr (which Flask shows in logs) and log buffer"""
     print(message, file=sys.stderr)
     sys.stderr.flush()
+    # Also add to log buffer
+    log_buffer.add_log('INFO', message, datetime.now().isoformat())
 
 IMAGE_SCRIPT = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'display_image.py')
 CONFIG_FILE = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'config.json')
@@ -440,6 +497,11 @@ def memory_status():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/logs/viewer')
+def logs_viewer():
+    """HTML page for viewing logs"""
+    return render_template('logs.html')
+
 @app.route('/')
 def index():
     return """
@@ -660,6 +722,53 @@ def check_manual_sync_trigger():
             return jsonify({'trigger': True})
         else:
             return jsonify({'trigger': False})
+
+@app.route('/logs')
+def get_logs():
+    """Get recent logs as JSON"""
+    limit = request.args.get('limit', 100, type=int)
+    logs = log_buffer.get_logs(limit=min(limit, 1000))  # Cap at 1000
+    return jsonify({
+        'logs': logs,
+        'count': len(logs),
+        'total_buffered': len(log_buffer.logs)
+    })
+
+@app.route('/logs/stream')
+def stream_logs():
+    """Stream logs in real-time using Server-Sent Events (SSE)"""
+    def generate():
+        subscriber_queue = log_buffer.subscribe()
+        try:
+            # Send initial message
+            yield f"data: {json.dumps({'type': 'connected', 'message': 'Log stream connected'})}\n\n"
+            
+            # Send recent logs first
+            recent_logs = log_buffer.get_logs(limit=50)
+            for log_entry in recent_logs:
+                yield f"data: {json.dumps({'type': 'log', 'data': log_entry})}\n\n"
+            
+            # Stream new logs as they arrive
+            while True:
+                try:
+                    log_entry = subscriber_queue.get(timeout=30)
+                    yield f"data: {json.dumps({'type': 'log', 'data': log_entry})}\n\n"
+                except queue.Empty:
+                    # Send keepalive every 30 seconds
+                    yield f"data: {json.dumps({'type': 'keepalive', 'timestamp': datetime.now().isoformat()})}\n\n"
+        except GeneratorExit:
+            pass
+        finally:
+            log_buffer.unsubscribe(subscriber_queue)
+    
+    return Response(
+        stream_with_context(generate()),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'X-Accel-Buffering': 'no'  # Disable nginx buffering
+        }
+    )
 
 @app.route('/mode/config', methods=['GET', 'POST'])
 def mode_config():

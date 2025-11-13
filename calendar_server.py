@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding:utf-8 -*-
 
-from flask import Flask, render_template, request, jsonify, send_file
+from flask import Flask, render_template, request, jsonify, send_file, Response, stream_with_context
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 import os
@@ -13,28 +13,103 @@ import hashlib
 import tempfile
 import sys
 import logging
+import time
+import queue
 
 app = Flask(__name__)
 
-# Configure logging to go to stderr (which systemd/journald captures)
+# Log buffer for streaming logs via HTTP
+class LogBuffer:
+    """In-memory ring buffer for storing recent logs"""
+    def __init__(self, max_size=1000):
+        self.max_size = max_size
+        self.logs = []
+        self.lock = threading.Lock()
+        self.subscribers = []  # For SSE streaming
+    
+    def add_log(self, level, message, timestamp=None):
+        """Add a log entry"""
+        if timestamp is None:
+            timestamp = datetime.now().isoformat()
+        
+        log_entry = {
+            'timestamp': timestamp,
+            'level': level,
+            'message': message
+        }
+        
+        with self.lock:
+            self.logs.append(log_entry)
+            if len(self.logs) > self.max_size:
+                self.logs.pop(0)
+            
+            # Notify SSE subscribers
+            for subscriber_queue in self.subscribers[:]:  # Copy list to avoid modification during iteration
+                try:
+                    subscriber_queue.put(log_entry, block=False)
+                except queue.Full:
+                    # Remove subscriber if queue is full (client disconnected)
+                    self.subscribers.remove(subscriber_queue)
+    
+    def get_logs(self, limit=100):
+        """Get recent logs"""
+        with self.lock:
+            return self.logs[-limit:]
+    
+    def subscribe(self):
+        """Subscribe to new logs (returns a queue for SSE streaming)"""
+        subscriber_queue = queue.Queue(maxsize=100)
+        with self.lock:
+            self.subscribers.append(subscriber_queue)
+        return subscriber_queue
+    
+    def unsubscribe(self, subscriber_queue):
+        """Unsubscribe from log updates"""
+        with self.lock:
+            if subscriber_queue in self.subscribers:
+                self.subscribers.remove(subscriber_queue)
+
+# Global log buffer
+log_buffer = LogBuffer(max_size=1000)
+
+# Custom log handler that writes to both stderr and log buffer
+class LogBufferHandler(logging.Handler):
+    """Log handler that writes to both stderr and log buffer"""
+    def emit(self, record):
+        try:
+            msg = self.format(record)
+            # Write to stderr (original behavior)
+            print(msg, file=sys.stderr)
+            sys.stderr.flush()
+            # Also add to buffer
+            log_buffer.add_log(record.levelname, msg, datetime.fromtimestamp(record.created).isoformat())
+        except Exception:
+            self.handleError(record)
+
+# Configure logging to go to stderr (which systemd/journald captures) and log buffer
+log_format = logging.Formatter('[%(asctime)s] %(levelname)s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+buffer_handler = LogBufferHandler()
+buffer_handler.setFormatter(log_format)
+
 logging.basicConfig(
     level=logging.INFO,
     format='[%(asctime)s] %(levelname)s: %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S',
     handlers=[
-        logging.StreamHandler(sys.stderr)
+        logging.StreamHandler(sys.stderr),
+        buffer_handler
     ],
     force=True  # Override any existing configuration
 )
 logger = logging.getLogger(__name__)
 
-# Configure Flask's logger to also use stderr
+# Configure Flask's logger to also use stderr and buffer
 app.logger.setLevel(logging.INFO)
-app.logger.handlers = [logging.StreamHandler(sys.stderr)]
+app.logger.handlers = [logging.StreamHandler(sys.stderr), buffer_handler]
 
 # Helper function for compatibility with existing print() calls
 def log_info(message):
-    """Log to stderr (which systemd captures)"""
+    """Log to stderr (which systemd captures) and log buffer"""
     logger.info(message)
 
 # Google Calendar API configuration
@@ -412,6 +487,58 @@ def get_calendar_image_hash():
         screenshot_cache['events_hash'] = current_events_hash
         
         return jsonify({'hash': image_hash})
+
+@app.route('/logs')
+def get_logs():
+    """Get recent logs as JSON"""
+    limit = request.args.get('limit', 100, type=int)
+    logs = log_buffer.get_logs(limit=min(limit, 1000))  # Cap at 1000
+    return jsonify({
+        'logs': logs,
+        'count': len(logs),
+        'total_buffered': len(log_buffer.logs)
+    })
+
+@app.route('/logs/stream')
+def stream_logs():
+    """Stream logs in real-time using Server-Sent Events (SSE)"""
+    def generate():
+        subscriber_queue = log_buffer.subscribe()
+        try:
+            # Send initial message
+            yield f"data: {json.dumps({'type': 'connected', 'message': 'Log stream connected'})}\n\n"
+            
+            # Send recent logs first
+            recent_logs = log_buffer.get_logs(limit=50)
+            for log_entry in recent_logs:
+                yield f"data: {json.dumps({'type': 'log', 'data': log_entry})}\n\n"
+            
+            # Stream new logs as they arrive
+            while True:
+                try:
+                    log_entry = subscriber_queue.get(timeout=30)
+                    yield f"data: {json.dumps({'type': 'log', 'data': log_entry})}\n\n"
+                except queue.Empty:
+                    # Send keepalive every 30 seconds
+                    yield f"data: {json.dumps({'type': 'keepalive', 'timestamp': datetime.now().isoformat()})}\n\n"
+        except GeneratorExit:
+            pass
+        finally:
+            log_buffer.unsubscribe(subscriber_queue)
+    
+    return Response(
+        stream_with_context(generate()),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'X-Accel-Buffering': 'no'  # Disable nginx buffering
+        }
+    )
+
+@app.route('/logs/viewer')
+def logs_viewer():
+    """HTML page for viewing logs"""
+    return render_template('logs.html')
 
 @app.route('/setup')
 def setup():
