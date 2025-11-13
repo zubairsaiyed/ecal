@@ -178,12 +178,14 @@ def generate_calendar_screenshot(width=1600, height=1200):
         # Use headless chromium to take screenshot
         # Use --window-size to set viewport, and ensure full page capture
         # Note: --screenshot captures the viewport, so window-size must match exactly
+        # Use --screenshot-full-page=false to capture only viewport (which is what we want)
         cmd = [
             "chromium-browser",
             "http://localhost:5000",  # Self-referencing URL
-            "--headless",
+            "--headless=new",
             f"--screenshot={screenshot_path}",
             f"--window-size={width},{height}",
+            f"--viewport-size={width},{height}",
             f"--force-device-scale-factor=1",
             "--disable-gpu",
             "--no-sandbox",
@@ -193,7 +195,9 @@ def generate_calendar_screenshot(width=1600, height=1200):
             "--run-all-compositor-stages-before-draw",
             "--disable-background-timer-throttling",
             "--disable-backgrounding-occluded-windows",
-            "--disable-renderer-backgrounding"
+            "--disable-renderer-backgrounding",
+            "--disable-features=TranslateUI",
+            "--disable-ipc-flooding-protection"
         ]
         
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
@@ -212,9 +216,12 @@ def generate_calendar_screenshot(width=1600, height=1200):
             # If dimensions don't match, resize to exact expected size
             if actual_width != width or actual_height != height:
                 log_info(f"Resizing screenshot from {actual_width}x{actual_height} to {width}x{height}")
+                # Use high-quality resampling for better results
                 img = img.resize((width, height), PILImage.Resampling.LANCZOS)
-                img.save(screenshot_path, 'PNG')
+                img.save(screenshot_path, 'PNG', optimize=False)
                 log_info(f"Screenshot resized to exact dimensions: {width}x{height}")
+            else:
+                log_info(f"Screenshot dimensions match expected: {width}x{height}")
         except Exception as e:
             log_info(f"Warning: Could not verify/resize screenshot: {e}")
         
