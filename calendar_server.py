@@ -226,18 +226,39 @@ def generate_calendar_screenshot(width=1600, height=1200):
                 log_info(f"After height crop: {img.size[0]}x{img.size[1]}")
             
             # Detect and crop whitespace from bottom using PIL (no numpy required)
-            # Check bottom rows for whitespace (white = 255,255,255 or very close)
-            white_threshold = 240  # Lower threshold to catch more whitespace
-            required_white_rows = 5  # Reduced from 10 to be more aggressive
+            # Strategy: Find the last row with significant content (non-white pixels)
+            white_threshold = 240  # Consider pixels with RGB > 240 as white
+            content_threshold = 0.02  # Need at least 2% non-white pixels to be considered content
+            pixels = img.load()
+            sample_step = max(1, actual_width // 50)  # Sample every Nth pixel for performance
             
-            # Check bottom for whitespace (optimized by sampling pixels)
+            log_info(f"Scanning for last content row (checking last {min(400, actual_height)} rows)")
+            rows_to_check = min(400, actual_height)  # Check last 400 rows
+            
+            # Find the last row with significant content
+            last_content_row = None
+            for y in range(actual_height - 1, max(-1, actual_height - rows_to_check - 1), -1):
+                non_white_count = 0
+                sampled_pixels = 0
+                
+                for x in range(0, actual_width, sample_step):
+                    r, g, b = pixels[x, y]
+                    # Count non-white pixels
+                    if not (r > white_threshold and g > white_threshold and b > white_threshold):
+                        non_white_count += 1
+                    sampled_pixels += 1
+                
+                non_white_ratio = non_white_count / sampled_pixels if sampled_pixels > 0 else 0
+                
+                if non_white_ratio >= content_threshold:
+                    last_content_row = y
+                    log_info(f"Found last content row at y={y} (non-white ratio: {non_white_ratio:.2%})")
+                    break
+            
+            # Also check for consecutive white rows as a fallback
             bottom_crop = actual_height
             consecutive_white_rows = 0
-            pixels = img.load()
-            sample_step = max(1, actual_width // 50)  # Sample more pixels for better detection
-            
-            log_info(f"Scanning for whitespace at bottom (checking last {min(200, actual_height)} rows)")
-            rows_to_check = min(200, actual_height)  # Only check last 200 rows for performance
+            required_white_rows = 3  # Reduced to 3 for more aggressive detection
             
             for y in range(actual_height - 1, max(-1, actual_height - rows_to_check - 1), -1):
                 white_pixel_count = 0
@@ -249,14 +270,24 @@ def generate_calendar_screenshot(width=1600, height=1200):
                     sampled_pixels += 1
                 
                 white_ratio = white_pixel_count / sampled_pixels if sampled_pixels > 0 else 0
-                if white_ratio > 0.90:  # 90% white pixels (lowered from 95%)
+                if white_ratio > 0.90:  # 90% white pixels
                     consecutive_white_rows += 1
                     if consecutive_white_rows >= required_white_rows:
                         bottom_crop = y + 1  # Crop just before the white rows start
-                        log_info(f"Found whitespace starting at row {y}, will crop to {bottom_crop}")
+                        log_info(f"Found {consecutive_white_rows} consecutive white rows starting at y={y}, will crop to {bottom_crop}")
                         break
                 else:
                     consecutive_white_rows = 0
+            
+            # Use the more aggressive of the two methods
+            if last_content_row is not None:
+                # Add a small buffer (5 pixels) to ensure we don't cut off content
+                suggested_crop = last_content_row + 6
+                if suggested_crop < bottom_crop:
+                    bottom_crop = suggested_crop
+                    log_info(f"Using content-based detection: cropping to y={bottom_crop}")
+            else:
+                log_info(f"Using white-row detection: cropping to y={bottom_crop}")
             
             # Check top for whitespace (less likely but check anyway)
             top_crop = 0
