@@ -218,18 +218,28 @@ def generate_calendar_screenshot(width=1600, height=1200):
             if img.mode != 'RGB':
                 img = img.convert('RGB')
             
+            # If screenshot is taller than expected, crop from bottom to exact height
+            if actual_height > height:
+                log_info(f"Screenshot is taller than expected ({actual_height} > {height}), cropping from bottom")
+                img = img.crop((0, 0, actual_width, height))
+                actual_height = height
+                log_info(f"After height crop: {img.size[0]}x{img.size[1]}")
+            
             # Detect and crop whitespace from bottom using PIL (no numpy required)
             # Check bottom rows for whitespace (white = 255,255,255 or very close)
-            white_threshold = 250  # Consider pixels with RGB > 250 as white
-            required_white_rows = 10  # Need 10 consecutive white rows to consider it whitespace
+            white_threshold = 240  # Lower threshold to catch more whitespace
+            required_white_rows = 5  # Reduced from 10 to be more aggressive
             
             # Check bottom for whitespace (optimized by sampling pixels)
             bottom_crop = actual_height
             consecutive_white_rows = 0
             pixels = img.load()
-            sample_step = max(1, actual_width // 100)  # Sample every Nth pixel for performance
+            sample_step = max(1, actual_width // 50)  # Sample more pixels for better detection
             
-            for y in range(actual_height - 1, -1, -1):
+            log_info(f"Scanning for whitespace at bottom (checking last {min(200, actual_height)} rows)")
+            rows_to_check = min(200, actual_height)  # Only check last 200 rows for performance
+            
+            for y in range(actual_height - 1, max(-1, actual_height - rows_to_check - 1), -1):
                 white_pixel_count = 0
                 sampled_pixels = 0
                 for x in range(0, actual_width, sample_step):
@@ -239,10 +249,11 @@ def generate_calendar_screenshot(width=1600, height=1200):
                     sampled_pixels += 1
                 
                 white_ratio = white_pixel_count / sampled_pixels if sampled_pixels > 0 else 0
-                if white_ratio > 0.95:  # 95% white pixels
+                if white_ratio > 0.90:  # 90% white pixels (lowered from 95%)
                     consecutive_white_rows += 1
                     if consecutive_white_rows >= required_white_rows:
-                        bottom_crop = y + required_white_rows
+                        bottom_crop = y + 1  # Crop just before the white rows start
+                        log_info(f"Found whitespace starting at row {y}, will crop to {bottom_crop}")
                         break
                 else:
                     consecutive_white_rows = 0
@@ -250,7 +261,7 @@ def generate_calendar_screenshot(width=1600, height=1200):
             # Check top for whitespace (less likely but check anyway)
             top_crop = 0
             consecutive_white_rows = 0
-            for y in range(0, actual_height):
+            for y in range(0, min(100, actual_height)):  # Only check first 100 rows
                 white_pixel_count = 0
                 sampled_pixels = 0
                 for x in range(0, actual_width, sample_step):
@@ -260,10 +271,11 @@ def generate_calendar_screenshot(width=1600, height=1200):
                     sampled_pixels += 1
                 
                 white_ratio = white_pixel_count / sampled_pixels if sampled_pixels > 0 else 0
-                if white_ratio > 0.95:
+                if white_ratio > 0.90:
                     consecutive_white_rows += 1
                     if consecutive_white_rows >= required_white_rows:
-                        top_crop = y - required_white_rows
+                        top_crop = y
+                        log_info(f"Found whitespace at top, will crop from row {top_crop}")
                         break
                 else:
                     consecutive_white_rows = 0
