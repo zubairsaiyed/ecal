@@ -207,24 +207,90 @@ def generate_calendar_screenshot(width=1600, height=1200):
             log_info(f"Screenshot failed: {result.stderr}")
             return None
         
-        # Verify and fix screenshot dimensions if needed
+        # Verify and fix screenshot dimensions, and crop whitespace if needed
         try:
             from PIL import Image as PILImage
             img = PILImage.open(screenshot_path)
             actual_width, actual_height = img.size
             log_info(f"Screenshot dimensions: {actual_width}x{actual_height} (expected: {width}x{height})")
             
-            # If dimensions don't match, resize to exact expected size
-            if actual_width != width or actual_height != height:
-                log_info(f"Resizing screenshot from {actual_width}x{actual_height} to {width}x{height}")
+            # Convert to RGB if needed for processing
+            if img.mode != 'RGB':
+                img = img.convert('RGB')
+            
+            # Detect and crop whitespace from bottom using PIL (no numpy required)
+            # Check bottom rows for whitespace (white = 255,255,255 or very close)
+            white_threshold = 250  # Consider pixels with RGB > 250 as white
+            required_white_rows = 10  # Need 10 consecutive white rows to consider it whitespace
+            
+            # Check bottom for whitespace (optimized by sampling pixels)
+            bottom_crop = actual_height
+            consecutive_white_rows = 0
+            pixels = img.load()
+            sample_step = max(1, actual_width // 100)  # Sample every Nth pixel for performance
+            
+            for y in range(actual_height - 1, -1, -1):
+                white_pixel_count = 0
+                sampled_pixels = 0
+                for x in range(0, actual_width, sample_step):
+                    r, g, b = pixels[x, y]
+                    if r > white_threshold and g > white_threshold and b > white_threshold:
+                        white_pixel_count += 1
+                    sampled_pixels += 1
+                
+                white_ratio = white_pixel_count / sampled_pixels if sampled_pixels > 0 else 0
+                if white_ratio > 0.95:  # 95% white pixels
+                    consecutive_white_rows += 1
+                    if consecutive_white_rows >= required_white_rows:
+                        bottom_crop = y + required_white_rows
+                        break
+                else:
+                    consecutive_white_rows = 0
+            
+            # Check top for whitespace (less likely but check anyway)
+            top_crop = 0
+            consecutive_white_rows = 0
+            for y in range(0, actual_height):
+                white_pixel_count = 0
+                sampled_pixels = 0
+                for x in range(0, actual_width, sample_step):
+                    r, g, b = pixels[x, y]
+                    if r > white_threshold and g > white_threshold and b > white_threshold:
+                        white_pixel_count += 1
+                    sampled_pixels += 1
+                
+                white_ratio = white_pixel_count / sampled_pixels if sampled_pixels > 0 else 0
+                if white_ratio > 0.95:
+                    consecutive_white_rows += 1
+                    if consecutive_white_rows >= required_white_rows:
+                        top_crop = y - required_white_rows
+                        break
+                else:
+                    consecutive_white_rows = 0
+                    top_crop = y
+                    break
+            
+            # Crop if whitespace detected
+            if top_crop > 0 or bottom_crop < actual_height:
+                log_info(f"Cropping whitespace: top={top_crop}, bottom={bottom_crop} (original height={actual_height})")
+                img = img.crop((0, max(0, top_crop), actual_width, min(actual_height, bottom_crop)))
+                actual_height = img.size[1]
+                log_info(f"After whitespace crop: {img.size[0]}x{img.size[1]}")
+            
+            # If dimensions don't match expected, resize to exact expected size
+            if img.size[0] != width or img.size[1] != height:
+                log_info(f"Resizing screenshot from {img.size[0]}x{img.size[1]} to {width}x{height}")
                 # Use high-quality resampling for better results
                 img = img.resize((width, height), PILImage.Resampling.LANCZOS)
                 img.save(screenshot_path, 'PNG', optimize=False)
                 log_info(f"Screenshot resized to exact dimensions: {width}x{height}")
             else:
+                img.save(screenshot_path, 'PNG', optimize=False)
                 log_info(f"Screenshot dimensions match expected: {width}x{height}")
         except Exception as e:
             log_info(f"Warning: Could not verify/resize screenshot: {e}")
+            import traceback
+            log_info(f"Traceback: {traceback.format_exc()}")
         
         # Calculate hash of the image
         with open(screenshot_path, 'rb') as f:
