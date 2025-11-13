@@ -27,6 +27,8 @@
             padding: 0;
             width: 100vw;
             height: 100vh;
+            display: flex;
+            flex-direction: column;
         }
 
         .weekdays-header {
@@ -37,6 +39,7 @@
             border: none;
             margin: 0;
             padding: 0;
+            flex-shrink: 0;
         }
 
         .weekday {
@@ -52,19 +55,25 @@
         .calendar-grid {
             display: grid;
             grid-template-columns: repeat(7, 1fr);
+            grid-auto-rows: 1fr;
             gap: 1px;
             background: #000000;
             border: none;
             margin: 0;
             padding: 0;
+            flex: 1;
+            min-height: 0;
         }
 
         .day-cell {
             background: #ffffff;
-            min-height: 200px;
+            min-height: 0;
+            height: 100%;
             padding: 12px;
             border: none;
             position: relative;
+            display: flex;
+            flex-direction: column;
         }
 
         .day-cell.other-month {
@@ -94,6 +103,9 @@
             display: flex;
             flex-direction: column;
             gap: 6px;
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
         }
 
         .event {
