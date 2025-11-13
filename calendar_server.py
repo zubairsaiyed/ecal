@@ -330,9 +330,30 @@ def fetch_calendar_events(service, calendar_ids=None, max_results=50):
                     'calendarId': calendar_id
                 }
                 all_events.append(calendar_event)
-        # Optionally, sort all_events by start time
-        all_events.sort(key=lambda e: e['start'])
-        return all_events, None
+        
+        # Deduplicate events across calendars
+        # Events are considered duplicates if they have the same title, start, and end time
+        seen_events = {}
+        deduplicated_events = []
+        
+        for event in all_events:
+            # Create a unique key based on title, start, and end
+            event_key = (
+                event.get('title', '').strip().lower(),
+                event.get('start', ''),
+                event.get('end', '')
+            )
+            
+            # If we haven't seen this event before, add it
+            if event_key not in seen_events:
+                seen_events[event_key] = True
+                deduplicated_events.append(event)
+            # If we have seen it, keep the first occurrence (which may have better color/calendar info)
+            # Optionally, we could merge calendar IDs if needed
+        
+        # Sort deduplicated events by start time
+        deduplicated_events.sort(key=lambda e: e['start'])
+        return deduplicated_events, None
     except Exception as e:
         return [], f"Error fetching events: {str(e)}"
 
