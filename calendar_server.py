@@ -177,6 +177,7 @@ def generate_calendar_screenshot(width=1600, height=1200):
     try:
         # Use headless chromium to take screenshot
         # Use --window-size to set viewport, and ensure full page capture
+        # Note: --screenshot captures the viewport, so window-size must match exactly
         cmd = [
             "chromium-browser",
             "http://localhost:5000",  # Self-referencing URL
@@ -186,9 +187,13 @@ def generate_calendar_screenshot(width=1600, height=1200):
             f"--force-device-scale-factor=1",
             "--disable-gpu",
             "--no-sandbox",
-            "--virtual-time-budget=3000",  # Wait 3 seconds for rendering
+            "--virtual-time-budget=5000",  # Wait 5 seconds for rendering
             "--hide-scrollbars",
-            "--disable-web-security"
+            "--disable-web-security",
+            "--run-all-compositor-stages-before-draw",
+            "--disable-background-timer-throttling",
+            "--disable-backgrounding-occluded-windows",
+            "--disable-renderer-backgrounding"
         ]
         
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
@@ -196,6 +201,22 @@ def generate_calendar_screenshot(width=1600, height=1200):
         if result.returncode != 0:
             log_info(f"Screenshot failed: {result.stderr}")
             return None
+        
+        # Verify and fix screenshot dimensions if needed
+        try:
+            from PIL import Image as PILImage
+            img = PILImage.open(screenshot_path)
+            actual_width, actual_height = img.size
+            log_info(f"Screenshot dimensions: {actual_width}x{actual_height} (expected: {width}x{height})")
+            
+            # If dimensions don't match, resize to exact expected size
+            if actual_width != width or actual_height != height:
+                log_info(f"Resizing screenshot from {actual_width}x{actual_height} to {width}x{height}")
+                img = img.resize((width, height), PILImage.Resampling.LANCZOS)
+                img.save(screenshot_path, 'PNG')
+                log_info(f"Screenshot resized to exact dimensions: {width}x{height}")
+        except Exception as e:
+            log_info(f"Warning: Could not verify/resize screenshot: {e}")
         
         # Calculate hash of the image
         with open(screenshot_path, 'rb') as f:
