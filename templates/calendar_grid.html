@@ -81,6 +81,15 @@
             color: #999999;
         }
 
+        .day-cell.past {
+            background: #fafafa;
+            opacity: 0.5;
+        }
+
+        .day-cell.past .day-number {
+            color: #999999;
+        }
+
         .day-cell.today {
             background: #f0f0f0;
             outline: 1px solid #000000;
@@ -116,6 +125,15 @@
             background: #ffffff;
             cursor: default;
             line-height: 1.4;
+        }
+
+        .event.past {
+            opacity: 0.4;
+        }
+
+        .event.past .event-time,
+        .event.past .event-title {
+            color: #666666;
         }
 
         .event-time {
@@ -378,10 +396,15 @@
             while (currentDate <= endDate) {
                 const dateKey = getDateKey(currentDate);
                 const isToday = dateKey === todayKey;
+                const isPast = currentDate < today;
                 const isOtherMonth = currentDate.getMonth() !== startMonth;
                 
                 const dayCell = document.createElement('div');
-                dayCell.className = 'day-cell' + (isOtherMonth ? ' other-month' : '') + (isToday ? ' today' : '');
+                let dayCellClass = 'day-cell';
+                if (isOtherMonth) dayCellClass += ' other-month';
+                if (isPast) dayCellClass += ' past';
+                if (isToday) dayCellClass += ' today';
+                dayCell.className = dayCellClass;
                 
                 const dayNumber = document.createElement('div');
                 dayNumber.className = 'day-number';
@@ -393,8 +416,17 @@
                 
                 const dayEvents = eventsByDate[dateKey] || [];
                 dayEvents.forEach(event => {
+                    // Check if event is in the past
+                    const eventStart = new Date(event.start);
+                    const eventEnd = new Date(event.end || event.start);
+                    const now = new Date();
+                    const isEventPast = eventEnd < now;
+                    
                     const eventDiv = document.createElement('div');
-                    eventDiv.className = 'event ' + getEventColor(event) + (isAllDayEvent(event) ? ' all-day' : '');
+                    let eventClass = 'event ' + getEventColor(event);
+                    if (isAllDayEvent(event)) eventClass += ' all-day';
+                    if (isEventPast) eventClass += ' past';
+                    eventDiv.className = eventClass;
                     
                     const timeSpan = document.createElement('span');
                     timeSpan.className = 'event-time';
