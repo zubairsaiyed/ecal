@@ -179,29 +179,21 @@ def generate_calendar_screenshot(width=1600, height=1200):
         # Use --window-size to set viewport, and ensure full page capture
         # Note: --screenshot captures the viewport, so window-size must match exactly
         # Use --screenshot-full-page=false to capture only viewport (which is what we want)
-        # Use 2x device scale factor for better text rendering quality
-        # Keep viewport at logical size (1x), but render at 2x physical pixels
-        # This way CSS viewport units (vw, vh) work correctly
-        device_scale_factor = 2
+        # Use fallback approach: screenshot at 1600x1287 (add 87px to expected height)
+        # Then crop 87px from bottom to get final 1600x1200 image
+        # Post-processing filters will be applied to improve text rendering
         screenshot_height = height + 87  # 1200 + 87 = 1287
-        # Viewport size stays at logical size (1x) so CSS works correctly
-        # Device scale factor 2 means it renders at 2x physical pixels
-        screenshot_width_2x = width * device_scale_factor  # 1600 * 2 = 3200 (physical pixels)
-        screenshot_height_2x = screenshot_height * device_scale_factor  # 1287 * 2 = 2574 (physical pixels)
-        log_info(f"Using 2x device scale factor for better text rendering")
-        log_info(f"Viewport at logical size: {width}x{screenshot_height}, renders at {screenshot_width_2x}x{screenshot_height_2x} physical pixels")
-        log_info(f"Will downscale to {width}x{screenshot_height}, then crop to {width}x{height}")
+        log_info(f"Using fallback approach: screenshot at {width}x{screenshot_height}, will crop to {width}x{height}")
+        log_info(f"Post-processing filters will be applied to improve text rendering")
         
         cmd = [
             "chromium-browser",
             "http://localhost:5000",  # Self-referencing URL
             "--headless=new",
             f"--screenshot={screenshot_path}",
-            # Keep window/viewport at logical size (1x) so CSS viewport units work correctly
             f"--window-size={width},{screenshot_height}",
             f"--viewport-size={width},{screenshot_height}",
-            # Device scale factor 2 means it renders at 2x physical pixels
-            f"--force-device-scale-factor={device_scale_factor}",
+            f"--force-device-scale-factor=1",
             # Try without --disable-gpu for better font rendering quality
             # If this causes issues in headless mode, uncomment the line below
             # "--disable-gpu",
@@ -226,26 +218,35 @@ def generate_calendar_screenshot(width=1600, height=1200):
             log_info(f"Screenshot failed: {result.stderr}")
             return None
         
-        # Verify and fix screenshot dimensions, downscale from 2x, and crop whitespace if needed
+        # Verify and fix screenshot dimensions, apply post-processing filters, and crop whitespace if needed
         try:
             from PIL import Image as PILImage
+            from PIL import ImageFilter, ImageEnhance
             img = PILImage.open(screenshot_path)
             actual_width, actual_height = img.size
-            log_info(f"Screenshot dimensions: {actual_width}x{actual_height} (expected 2x: {screenshot_width_2x}x{screenshot_height_2x})")
+            log_info(f"Screenshot dimensions: {actual_width}x{actual_height} (expected: {width}x{screenshot_height})")
             
             # Convert to RGB if needed for processing
             if img.mode != 'RGB':
                 img = img.convert('RGB')
             
-            # Downscale from 2x resolution to 1x using high-quality LANCZOS resampling
-            if actual_width == screenshot_width_2x and actual_height == screenshot_height_2x:
-                log_info(f"Downscaling from 2x resolution ({actual_width}x{actual_height}) to 1x ({width}x{screenshot_height}) using LANCZOS resampling")
-                img = img.resize((width, screenshot_height), PILImage.Resampling.LANCZOS)
-                log_info(f"After downscale: {img.size[0]}x{img.size[1]}")
-            elif actual_width == width and actual_height == screenshot_height:
-                log_info(f"Screenshot already at 1x resolution ({width}x{screenshot_height}), skipping downscale")
-            else:
-                log_info(f"Warning: Unexpected screenshot dimensions ({actual_width}x{actual_height}), expected either {screenshot_width_2x}x{screenshot_height_2x} or {width}x{screenshot_height}")
+            # Apply post-processing filters to improve text rendering
+            log_info("Applying post-processing filters to improve text rendering...")
+            
+            # 1. Apply Unsharp Mask filter to enhance text edges
+            # Parameters: radius=1.0 (blur radius), percent=150 (strength), threshold=3 (minimum contrast)
+            unsharp_mask = ImageFilter.UnsharpMask(radius=1.0, percent=150, threshold=3)
+            img = img.filter(unsharp_mask)
+            log_info("Applied Unsharp Mask filter")
+            
+            # 2. Apply Edge Enhancement for clearer text boundaries
+            img = img.filter(ImageFilter.EDGE_ENHANCE_MORE)
+            log_info("Applied Edge Enhancement filter")
+            
+            # 3. Apply slight Sharpness enhancement (1.3x for moderate improvement)
+            enhancer = ImageEnhance.Sharpness(img)
+            img = enhancer.enhance(1.3)
+            log_info("Applied Sharpness enhancement (1.3x)")
             
             # Crop 87px from bottom to get final 1600x1200 image
             if img.size[1] >= height:
