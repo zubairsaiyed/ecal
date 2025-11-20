@@ -218,118 +218,123 @@ def generate_calendar_screenshot(width=1600, height=1200):
             if img.mode != 'RGB':
                 img = img.convert('RGB')
             
-            # If screenshot is taller than expected, crop from bottom to exact height
-            if actual_height > height:
-                log_info(f"Screenshot is taller than expected ({actual_height} > {height}), cropping from bottom")
-                img = img.crop((0, 0, actual_width, height))
-                actual_height = height
-                log_info(f"After height crop: {img.size[0]}x{img.size[1]}")
+            # COMMENTED OUT: Cropping and resizing to prevent stretching
+            # # If screenshot is taller than expected, crop from bottom to exact height
+            # if actual_height > height:
+            #     log_info(f"Screenshot is taller than expected ({actual_height} > {height}), cropping from bottom")
+            #     img = img.crop((0, 0, actual_width, height))
+            #     actual_height = height
+            #     log_info(f"After height crop: {img.size[0]}x{img.size[1]}")
+            # 
+            # # Detect and crop whitespace from bottom using PIL (no numpy required)
+            # # Strategy: Find the last row with significant content (non-white pixels)
+            # white_threshold = 240  # Consider pixels with RGB > 240 as white
+            # content_threshold = 0.02  # Need at least 2% non-white pixels to be considered content
+            # pixels = img.load()
+            # sample_step = max(1, actual_width // 50)  # Sample every Nth pixel for performance
+            # 
+            # log_info(f"Scanning for last content row (checking last {min(400, actual_height)} rows)")
+            # rows_to_check = min(400, actual_height)  # Check last 400 rows
+            # 
+            # # Find the last row with significant content
+            # last_content_row = None
+            # for y in range(actual_height - 1, max(-1, actual_height - rows_to_check - 1), -1):
+            #     non_white_count = 0
+            #     sampled_pixels = 0
+            #     
+            #     for x in range(0, actual_width, sample_step):
+            #         r, g, b = pixels[x, y]
+            #         # Count non-white pixels
+            #         if not (r > white_threshold and g > white_threshold and b > white_threshold):
+            #             non_white_count += 1
+            #         sampled_pixels += 1
+            #     
+            #     non_white_ratio = non_white_count / sampled_pixels if sampled_pixels > 0 else 0
+            #     
+            #     if non_white_ratio >= content_threshold:
+            #         last_content_row = y
+            #         log_info(f"Found last content row at y={y} (non-white ratio: {non_white_ratio:.2%})")
+            #         break
+            # 
+            # # Also check for consecutive white rows as a fallback
+            # bottom_crop = actual_height
+            # consecutive_white_rows = 0
+            # required_white_rows = 3  # Reduced to 3 for more aggressive detection
+            # 
+            # for y in range(actual_height - 1, max(-1, actual_height - rows_to_check - 1), -1):
+            #     white_pixel_count = 0
+            #     sampled_pixels = 0
+            #     for x in range(0, actual_width, sample_step):
+            #         r, g, b = pixels[x, y]
+            #         if r > white_threshold and g > white_threshold and b > white_threshold:
+            #             white_pixel_count += 1
+            #         sampled_pixels += 1
+            #     
+            #     white_ratio = white_pixel_count / sampled_pixels if sampled_pixels > 0 else 0
+            #     if white_ratio > 0.90:  # 90% white pixels
+            #         consecutive_white_rows += 1
+            #         if consecutive_white_rows >= required_white_rows:
+            #             bottom_crop = y + 1  # Crop just before the white rows start
+            #             log_info(f"Found {consecutive_white_rows} consecutive white rows starting at y={y}, will crop to {bottom_crop}")
+            #             break
+            #     else:
+            #         consecutive_white_rows = 0
+            # 
+            # # Use the more aggressive of the two methods
+            # if last_content_row is not None:
+            #     # Add a small buffer (5 pixels) to ensure we don't cut off content
+            #     suggested_crop = last_content_row + 6
+            #     if suggested_crop < bottom_crop:
+            #         bottom_crop = suggested_crop
+            #         log_info(f"Using content-based detection: cropping to y={bottom_crop}")
+            # else:
+            #     log_info(f"Using white-row detection: cropping to y={bottom_crop}")
+            # 
+            # # Check top for whitespace (less likely but check anyway)
+            # top_crop = 0
+            # consecutive_white_rows = 0
+            # for y in range(0, min(100, actual_height)):  # Only check first 100 rows
+            #     white_pixel_count = 0
+            #     sampled_pixels = 0
+            #     for x in range(0, actual_width, sample_step):
+            #         r, g, b = pixels[x, y]
+            #         if r > white_threshold and g > white_threshold and b > white_threshold:
+            #             white_pixel_count += 1
+            #         sampled_pixels += 1
+            #     
+            #     white_ratio = white_pixel_count / sampled_pixels if sampled_pixels > 0 else 0
+            #     if white_ratio > 0.90:
+            #         consecutive_white_rows += 1
+            #         if consecutive_white_rows >= required_white_rows:
+            #             top_crop = y
+            #             log_info(f"Found whitespace at top, will crop from row {top_crop}")
+            #             break
+            #     else:
+            #         consecutive_white_rows = 0
+            #         top_crop = y
+            #         break
+            # 
+            # # Crop if whitespace detected
+            # if top_crop > 0 or bottom_crop < actual_height:
+            #     log_info(f"Cropping whitespace: top={top_crop}, bottom={bottom_crop} (original height={actual_height})")
+            #     img = img.crop((0, max(0, top_crop), actual_width, min(actual_height, bottom_crop)))
+            #     actual_height = img.size[1]
+            #     log_info(f"After whitespace crop: {img.size[0]}x{img.size[1]}")
+            # 
+            # # If dimensions don't match expected, resize to exact expected size
+            # if img.size[0] != width or img.size[1] != height:
+            #     log_info(f"Resizing screenshot from {img.size[0]}x{img.size[1]} to {width}x{height}")
+            #     # Use high-quality resampling for better results
+            #     img = img.resize((width, height), PILImage.Resampling.LANCZOS)
+            #     img.save(screenshot_path, 'PNG', optimize=False)
+            #     log_info(f"Screenshot resized to exact dimensions: {width}x{height}")
+            # else:
+            #     img.save(screenshot_path, 'PNG', optimize=False)
+            #     log_info(f"Screenshot dimensions match expected: {width}x{height}")
             
-            # Detect and crop whitespace from bottom using PIL (no numpy required)
-            # Strategy: Find the last row with significant content (non-white pixels)
-            white_threshold = 240  # Consider pixels with RGB > 240 as white
-            content_threshold = 0.02  # Need at least 2% non-white pixels to be considered content
-            pixels = img.load()
-            sample_step = max(1, actual_width // 50)  # Sample every Nth pixel for performance
-            
-            log_info(f"Scanning for last content row (checking last {min(400, actual_height)} rows)")
-            rows_to_check = min(400, actual_height)  # Check last 400 rows
-            
-            # Find the last row with significant content
-            last_content_row = None
-            for y in range(actual_height - 1, max(-1, actual_height - rows_to_check - 1), -1):
-                non_white_count = 0
-                sampled_pixels = 0
-                
-                for x in range(0, actual_width, sample_step):
-                    r, g, b = pixels[x, y]
-                    # Count non-white pixels
-                    if not (r > white_threshold and g > white_threshold and b > white_threshold):
-                        non_white_count += 1
-                    sampled_pixels += 1
-                
-                non_white_ratio = non_white_count / sampled_pixels if sampled_pixels > 0 else 0
-                
-                if non_white_ratio >= content_threshold:
-                    last_content_row = y
-                    log_info(f"Found last content row at y={y} (non-white ratio: {non_white_ratio:.2%})")
-                    break
-            
-            # Also check for consecutive white rows as a fallback
-            bottom_crop = actual_height
-            consecutive_white_rows = 0
-            required_white_rows = 3  # Reduced to 3 for more aggressive detection
-            
-            for y in range(actual_height - 1, max(-1, actual_height - rows_to_check - 1), -1):
-                white_pixel_count = 0
-                sampled_pixels = 0
-                for x in range(0, actual_width, sample_step):
-                    r, g, b = pixels[x, y]
-                    if r > white_threshold and g > white_threshold and b > white_threshold:
-                        white_pixel_count += 1
-                    sampled_pixels += 1
-                
-                white_ratio = white_pixel_count / sampled_pixels if sampled_pixels > 0 else 0
-                if white_ratio > 0.90:  # 90% white pixels
-                    consecutive_white_rows += 1
-                    if consecutive_white_rows >= required_white_rows:
-                        bottom_crop = y + 1  # Crop just before the white rows start
-                        log_info(f"Found {consecutive_white_rows} consecutive white rows starting at y={y}, will crop to {bottom_crop}")
-                        break
-                else:
-                    consecutive_white_rows = 0
-            
-            # Use the more aggressive of the two methods
-            if last_content_row is not None:
-                # Add a small buffer (5 pixels) to ensure we don't cut off content
-                suggested_crop = last_content_row + 6
-                if suggested_crop < bottom_crop:
-                    bottom_crop = suggested_crop
-                    log_info(f"Using content-based detection: cropping to y={bottom_crop}")
-            else:
-                log_info(f"Using white-row detection: cropping to y={bottom_crop}")
-            
-            # Check top for whitespace (less likely but check anyway)
-            top_crop = 0
-            consecutive_white_rows = 0
-            for y in range(0, min(100, actual_height)):  # Only check first 100 rows
-                white_pixel_count = 0
-                sampled_pixels = 0
-                for x in range(0, actual_width, sample_step):
-                    r, g, b = pixels[x, y]
-                    if r > white_threshold and g > white_threshold and b > white_threshold:
-                        white_pixel_count += 1
-                    sampled_pixels += 1
-                
-                white_ratio = white_pixel_count / sampled_pixels if sampled_pixels > 0 else 0
-                if white_ratio > 0.90:
-                    consecutive_white_rows += 1
-                    if consecutive_white_rows >= required_white_rows:
-                        top_crop = y
-                        log_info(f"Found whitespace at top, will crop from row {top_crop}")
-                        break
-                else:
-                    consecutive_white_rows = 0
-                    top_crop = y
-                    break
-            
-            # Crop if whitespace detected
-            if top_crop > 0 or bottom_crop < actual_height:
-                log_info(f"Cropping whitespace: top={top_crop}, bottom={bottom_crop} (original height={actual_height})")
-                img = img.crop((0, max(0, top_crop), actual_width, min(actual_height, bottom_crop)))
-                actual_height = img.size[1]
-                log_info(f"After whitespace crop: {img.size[0]}x{img.size[1]}")
-            
-            # If dimensions don't match expected, resize to exact expected size
-            if img.size[0] != width or img.size[1] != height:
-                log_info(f"Resizing screenshot from {img.size[0]}x{img.size[1]} to {width}x{height}")
-                # Use high-quality resampling for better results
-                img = img.resize((width, height), PILImage.Resampling.LANCZOS)
-                img.save(screenshot_path, 'PNG', optimize=False)
-                log_info(f"Screenshot resized to exact dimensions: {width}x{height}")
-            else:
-                img.save(screenshot_path, 'PNG', optimize=False)
-                log_info(f"Screenshot dimensions match expected: {width}x{height}")
+            # Save image as-is without cropping or resizing
+            img.save(screenshot_path, 'PNG', optimize=False)
+            log_info(f"Screenshot saved as-is: {img.size[0]}x{img.size[1]}")
         except Exception as e:
             log_info(f"Warning: Could not verify/resize screenshot: {e}")
             import traceback
