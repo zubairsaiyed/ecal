@@ -245,8 +245,9 @@ def generate_calendar_screenshot(width=1600, height=1200):
             
             if settings.get('filter_enable_unsharp', True):
                 # Apply Unsharp Mask filter
+                # Note: PIL UnsharpMask expects: radius (float), percent (int), threshold (int)
                 radius = float(settings.get('filter_unsharp_radius', 1.0))
-                percent = float(settings.get('filter_unsharp_percent', 150))
+                percent = int(float(settings.get('filter_unsharp_percent', 150)))  # Convert to int
                 threshold = int(settings.get('filter_unsharp_threshold', 3))
                 unsharp_mask = ImageFilter.UnsharpMask(radius=radius, percent=percent, threshold=threshold)
                 img = img.filter(unsharp_mask)
