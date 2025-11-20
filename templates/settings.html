@@ -29,6 +29,25 @@
             </label>
             <input type="number" id="grid_weeks" name="grid_weeks" min="1" max="4" step="1" value="{{ settings.grid_weeks if settings.grid_weeks is defined else 2 }}" style="display:{% if settings.calendar_view == 'grid' %}block{% else %}none{% endif %};">
             <div id="grid_weeks_help" style="font-size:0.9em;color:#888;margin-top:8px;display:{% if settings.calendar_view == 'grid' %}block{% else %}none{% endif %};">Number of weeks to display in grid view (1-4 weeks).</div>
+            
+            <div id="font-weight-settings" style="display:{% if settings.calendar_view == 'grid' %}block{% else %}none{% endif %};margin-top:16px;">
+                <hr style="margin:24px 0;border:none;border-top:1px solid #444;">
+                <h2 style="margin-top:0;font-size:1.2em;">Font Weight Settings (Grid View)</h2>
+                <div style="font-size:0.9em;color:#888;margin-bottom:16px;">Adjust font boldness for different text elements (100-900, where 400 is normal, 600 is semi-bold, 700 is bold).</div>
+                
+                <label for="font_weight_weekday">Weekday Headers (100-900):</label>
+                <input type="number" id="font_weight_weekday" name="font_weight_weekday" min="100" max="900" step="100" value="{{ settings.font_weight_weekday if settings.font_weight_weekday is defined else 600 }}" style="width:100%;">
+                
+                <label for="font_weight_day_number" style="margin-top:12px;">Day Numbers (100-900):</label>
+                <input type="number" id="font_weight_day_number" name="font_weight_day_number" min="100" max="900" step="100" value="{{ settings.font_weight_day_number if settings.font_weight_day_number is defined else 600 }}" style="width:100%;">
+                
+                <label for="font_weight_event_time" style="margin-top:12px;">Event Times (100-900):</label>
+                <input type="number" id="font_weight_event_time" name="font_weight_event_time" min="100" max="900" step="100" value="{{ settings.font_weight_event_time if settings.font_weight_event_time is defined else 600 }}" style="width:100%;">
+                
+                <label for="font_weight_event_title" style="margin-top:12px;">Event Titles (100-900):</label>
+                <input type="number" id="font_weight_event_title" name="font_weight_event_title" min="100" max="900" step="100" value="{{ settings.font_weight_event_title if settings.font_weight_event_title is defined else 400 }}" style="width:100%;">
+            </div>
+            
             <label for="theme">FullCalendar Theme:</label>
             <select id="theme" name="theme">
                 <optgroup label="Standard Themes">
@@ -155,12 +174,13 @@
         </form>
     </div>
     <script>
-        // Show/hide grid weeks option based on calendar view
+        // Show/hide grid weeks option and font weight settings based on calendar view
         document.getElementById('calendar_view').addEventListener('change', function() {
             const isGrid = this.value === 'grid';
             document.getElementById('grid_weeks_label').style.display = isGrid ? 'block' : 'none';
             document.getElementById('grid_weeks').style.display = isGrid ? 'block' : 'none';
             document.getElementById('grid_weeks_help').style.display = isGrid ? 'block' : 'none';
+            document.getElementById('font-weight-settings').style.display = isGrid ? 'block' : 'none';
         });
 
         // Show/hide filter settings based on checkboxes
@@ -190,6 +210,11 @@
                 color_event_text: document.getElementById('color_event_text').checked,
                 calendar_ids: document.getElementById('calendar_ids').value.trim(),
                 calendar_colors: document.getElementById('calendar_colors').value,
+                // Font weight settings (only for grid view)
+                font_weight_weekday: parseInt(document.getElementById('font_weight_weekday').value) || 600,
+                font_weight_day_number: parseInt(document.getElementById('font_weight_day_number').value) || 600,
+                font_weight_event_time: parseInt(document.getElementById('font_weight_event_time').value) || 600,
+                font_weight_event_title: parseInt(document.getElementById('font_weight_event_title').value) || 400,
                 // Post-processing filter settings
                 filter_enable_unsharp: document.getElementById('filter_enable_unsharp').checked,
                 filter_unsharp_radius: parseFloat(document.getElementById('filter_unsharp_radius').value),

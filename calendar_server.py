@@ -132,6 +132,11 @@ SETTINGS_DEFAULTS = {
     'calendar_colors': {},
     'calendar_view': 'fullcalendar',  # 'fullcalendar' or 'grid'
     'grid_weeks': 2,  # Number of weeks to display in grid view (1-4)
+    # Font weight settings for grid view
+    'font_weight_weekday': 600,  # Font weight for weekday headers (100-900)
+    'font_weight_day_number': 600,  # Font weight for day numbers (100-900)
+    'font_weight_event_time': 600,  # Font weight for event times (100-900)
+    'font_weight_event_title': 400,  # Font weight for event titles (100-900)
     # Post-processing filter settings
     'filter_enable_unsharp': True,
     'filter_unsharp_radius': 1.0,
@@ -642,6 +647,13 @@ def api_settings():
     # Validate grid_weeks
     if 'grid_weeks' in settings:
         settings['grid_weeks'] = max(1, min(4, int(settings['grid_weeks'])))
+    # Validate font weight settings (must be multiples of 100 between 100-900)
+    for weight_key in ['font_weight_weekday', 'font_weight_day_number', 'font_weight_event_time', 'font_weight_event_title']:
+        if weight_key in settings:
+            weight = int(settings[weight_key])
+            # Round to nearest 100 and clamp to valid range
+            weight = max(100, min(900, round(weight / 100) * 100))
+            settings[weight_key] = weight
     # Validate filter settings
     if 'filter_unsharp_radius' in settings:
         settings['filter_unsharp_radius'] = max(0.1, min(5.0, float(settings['filter_unsharp_radius'])))
