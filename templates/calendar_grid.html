@@ -551,7 +551,14 @@
             const gapSize = 1; // 1px gap between rows
             const totalGaps = (totalRows - 1) * gapSize;
             const totalMinHeight = rowMinHeights.reduce((sum, h) => sum + h, 0) + totalGaps;
-            const availableHeight = grid.offsetHeight;
+            // Calculate available height directly from viewport to avoid offsetHeight rounding issues
+            const header = document.querySelector('.weekdays-header');
+            const headerHeight = header ? header.offsetHeight : 60;
+            const availableHeight = window.innerHeight - headerHeight;
+            
+            // Explicitly set grid height to match calculated available height to prevent whitespace
+            grid.style.height = `${availableHeight}px`;
+            grid.style.maxHeight = `${availableHeight}px`;
             
             // Always distribute space to fill the entire available height
             if (availableHeight > totalMinHeight) {
