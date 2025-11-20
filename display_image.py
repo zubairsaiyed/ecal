@@ -121,10 +121,11 @@ def display_image(image_path, zoom_to_fit=False, test_rotation=None, rotation_mo
             else:
                 print(f"No auto-rotation needed (current orientation maximizes screen usage)")
         elif rotation_mode == 'portrait':
-            # Portrait mode: apply fixed 270° counterclockwise rotation (same as 90° clockwise)
-            print("Portrait mode: applying 270° counterclockwise rotation")
-            Himage = Himage.rotate(270, expand=True)
-            print(f"Image size after 270° counterclockwise rotation: {Himage.size}")
+            # Portrait mode: apply 90° counterclockwise rotation
+            # (270° was over-rotated by 180°, so correct rotation is 90°)
+            print("Portrait mode: applying 90° counterclockwise rotation")
+            Himage = Himage.rotate(90, expand=True)
+            print(f"Image size after 90° counterclockwise rotation: {Himage.size}")
             image_was_rotated = True
             
             # Auto-zoom after rotation if enabled
