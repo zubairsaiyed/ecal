@@ -179,13 +179,18 @@ def generate_calendar_screenshot(width=1600, height=1200):
         # Use --window-size to set viewport, and ensure full page capture
         # Note: --screenshot captures the viewport, so window-size must match exactly
         # Use --screenshot-full-page=false to capture only viewport (which is what we want)
+        # Use fallback approach: screenshot at 1600x1287 (add 87px to expected height)
+        # Then crop 87px from bottom to get final 1600x1200 image
+        screenshot_height = height + 87  # 1200 + 87 = 1287
+        log_info(f"Using fallback approach: screenshot at {width}x{screenshot_height}, will crop to {width}x{height}")
+        
         cmd = [
             "chromium-browser",
             "http://localhost:5000",  # Self-referencing URL
             "--headless=new",
             f"--screenshot={screenshot_path}",
-            f"--window-size={width},{height}",
-            f"--viewport-size={width},{height}",
+            f"--window-size={width},{screenshot_height}",
+            f"--viewport-size={width},{screenshot_height}",
             f"--force-device-scale-factor=1",
             "--disable-gpu",
             "--no-sandbox",
@@ -198,7 +203,9 @@ def generate_calendar_screenshot(width=1600, height=1200):
             "--disable-renderer-backgrounding",
             "--disable-features=TranslateUI",
             "--disable-ipc-flooding-protection",
-            "--disable-extensions"
+            "--disable-extensions",
+            "--disable-infobars",  # Remove info bars that might take up space
+            "--disable-notifications"  # Remove notification areas
         ]
         
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
@@ -212,13 +219,21 @@ def generate_calendar_screenshot(width=1600, height=1200):
             from PIL import Image as PILImage
             img = PILImage.open(screenshot_path)
             actual_width, actual_height = img.size
-            log_info(f"Screenshot dimensions: {actual_width}x{actual_height} (expected: {width}x{height})")
+            log_info(f"Screenshot dimensions: {actual_width}x{actual_height} (screenshot at {width}x{screenshot_height}, target: {width}x{height})")
             
             # Convert to RGB if needed for processing
             if img.mode != 'RGB':
                 img = img.convert('RGB')
             
-            # COMMENTED OUT: Cropping and resizing to prevent stretching
+            # Crop 87px from bottom to get final 1600x1200 image
+            if actual_height >= height:
+                log_info(f"Cropping bottom 87px: from {actual_width}x{actual_height} to {width}x{height}")
+                img = img.crop((0, 0, width, height))
+                log_info(f"After crop: {img.size[0]}x{img.size[1]}")
+            else:
+                log_info(f"Warning: Screenshot height ({actual_height}) is less than target ({height}), cannot crop")
+            
+            # COMMENTED OUT: Previous cropping and resizing logic to prevent stretching
             # # If screenshot is taller than expected, crop from bottom to exact height
             # if actual_height > height:
             #     log_info(f"Screenshot is taller than expected ({actual_height} > {height}), cropping from bottom")
@@ -332,9 +347,16 @@ def generate_calendar_screenshot(width=1600, height=1200):
             #     img.save(screenshot_path, 'PNG', optimize=False)
             #     log_info(f"Screenshot dimensions match expected: {width}x{height}")
             
-            # Save image as-is without cropping or resizing
+            # Save cropped image with exact dimensions
             img.save(screenshot_path, 'PNG', optimize=False)
-            log_info(f"Screenshot saved as-is: {img.size[0]}x{img.size[1]}")
+            final_width, final_height = img.size
+            log_info(f"Screenshot saved: {final_width}x{final_height} (target: {width}x{height})")
+            
+            # Verify final dimensions match expected
+            if final_width == width and final_height == height:
+                log_info(f"Screenshot dimensions verified: {width}x{height}")
+            else:
+                log_info(f"Warning: Screenshot dimensions ({final_width}x{final_height}) do not match target ({width}x{height})")
         except Exception as e:
             log_info(f"Warning: Could not verify/resize screenshot: {e}")
             import traceback
