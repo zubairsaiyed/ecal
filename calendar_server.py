@@ -180,21 +180,27 @@ def generate_calendar_screenshot(width=1600, height=1200):
         # Note: --screenshot captures the viewport, so window-size must match exactly
         # Use --screenshot-full-page=false to capture only viewport (which is what we want)
         # Use 2x device scale factor for better text rendering quality
-        # Render at 2x resolution, then downscale with high-quality resampling
+        # Keep viewport at logical size (1x), but render at 2x physical pixels
+        # This way CSS viewport units (vw, vh) work correctly
         device_scale_factor = 2
         screenshot_height = height + 87  # 1200 + 87 = 1287
-        screenshot_width_2x = width * device_scale_factor  # 1600 * 2 = 3200
-        screenshot_height_2x = screenshot_height * device_scale_factor  # 1287 * 2 = 2574
+        # Viewport size stays at logical size (1x) so CSS works correctly
+        # Device scale factor 2 means it renders at 2x physical pixels
+        screenshot_width_2x = width * device_scale_factor  # 1600 * 2 = 3200 (physical pixels)
+        screenshot_height_2x = screenshot_height * device_scale_factor  # 1287 * 2 = 2574 (physical pixels)
         log_info(f"Using 2x device scale factor for better text rendering")
-        log_info(f"Screenshot at 2x resolution: {screenshot_width_2x}x{screenshot_height_2x}, will downscale to {width}x{screenshot_height}, then crop to {width}x{height}")
+        log_info(f"Viewport at logical size: {width}x{screenshot_height}, renders at {screenshot_width_2x}x{screenshot_height_2x} physical pixels")
+        log_info(f"Will downscale to {width}x{screenshot_height}, then crop to {width}x{height}")
         
         cmd = [
             "chromium-browser",
             "http://localhost:5000",  # Self-referencing URL
             "--headless=new",
             f"--screenshot={screenshot_path}",
-            f"--window-size={screenshot_width_2x},{screenshot_height_2x}",
-            f"--viewport-size={screenshot_width_2x},{screenshot_height_2x}",
+            # Keep window/viewport at logical size (1x) so CSS viewport units work correctly
+            f"--window-size={width},{screenshot_height}",
+            f"--viewport-size={width},{screenshot_height}",
+            # Device scale factor 2 means it renders at 2x physical pixels
             f"--force-device-scale-factor={device_scale_factor}",
             # Try without --disable-gpu for better font rendering quality
             # If this causes issues in headless mode, uncomment the line below
