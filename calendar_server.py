@@ -131,7 +131,16 @@ SETTINGS_DEFAULTS = {
     'calendar_ids': '',
     'calendar_colors': {},
     'calendar_view': 'fullcalendar',  # 'fullcalendar' or 'grid'
-    'grid_weeks': 2  # Number of weeks to display in grid view (1-4)
+    'grid_weeks': 2,  # Number of weeks to display in grid view (1-4)
+    # Post-processing filter settings
+    'filter_enable_unsharp': True,
+    'filter_unsharp_radius': 1.0,
+    'filter_unsharp_percent': 150,
+    'filter_unsharp_threshold': 3,
+    'filter_enable_edge_enhance': True,
+    'filter_edge_enhance_type': 'more',  # 'normal' or 'more'
+    'filter_enable_sharpness': True,
+    'filter_sharpness_factor': 1.3
 }
 settings_lock = threading.Lock()
 
@@ -231,22 +240,38 @@ def generate_calendar_screenshot(width=1600, height=1200):
                 img = img.convert('RGB')
             
             # Apply post-processing filters to improve text rendering
-            log_info("Applying post-processing filters to improve text rendering...")
+            settings = load_settings()
+            filters_applied = []
             
-            # 1. Apply Unsharp Mask filter to enhance text edges
-            # Parameters: radius=1.0 (blur radius), percent=150 (strength), threshold=3 (minimum contrast)
-            unsharp_mask = ImageFilter.UnsharpMask(radius=1.0, percent=150, threshold=3)
-            img = img.filter(unsharp_mask)
-            log_info("Applied Unsharp Mask filter")
+            if settings.get('filter_enable_unsharp', True):
+                # Apply Unsharp Mask filter
+                radius = float(settings.get('filter_unsharp_radius', 1.0))
+                percent = float(settings.get('filter_unsharp_percent', 150))
+                threshold = int(settings.get('filter_unsharp_threshold', 3))
+                unsharp_mask = ImageFilter.UnsharpMask(radius=radius, percent=percent, threshold=threshold)
+                img = img.filter(unsharp_mask)
+                filters_applied.append(f"Unsharp Mask (r={radius}, p={percent}, t={threshold})")
             
-            # 2. Apply Edge Enhancement for clearer text boundaries
-            img = img.filter(ImageFilter.EDGE_ENHANCE_MORE)
-            log_info("Applied Edge Enhancement filter")
+            if settings.get('filter_enable_edge_enhance', True):
+                # Apply Edge Enhancement
+                edge_type = settings.get('filter_edge_enhance_type', 'more')
+                if edge_type == 'more':
+                    img = img.filter(ImageFilter.EDGE_ENHANCE_MORE)
+                else:
+                    img = img.filter(ImageFilter.EDGE_ENHANCE)
+                filters_applied.append(f"Edge Enhance ({edge_type})")
             
-            # 3. Apply slight Sharpness enhancement (1.3x for moderate improvement)
-            enhancer = ImageEnhance.Sharpness(img)
-            img = enhancer.enhance(1.3)
-            log_info("Applied Sharpness enhancement (1.3x)")
+            if settings.get('filter_enable_sharpness', True):
+                # Apply Sharpness enhancement
+                factor = float(settings.get('filter_sharpness_factor', 1.3))
+                enhancer = ImageEnhance.Sharpness(img)
+                img = enhancer.enhance(factor)
+                filters_applied.append(f"Sharpness ({factor}x)")
+            
+            if filters_applied:
+                log_info(f"Applied post-processing filters: {', '.join(filters_applied)}")
+            else:
+                log_info("No post-processing filters enabled")
             
             # Crop 87px from bottom to get final 1600x1200 image
             if img.size[1] >= height:
@@ -616,6 +641,18 @@ def api_settings():
     # Validate grid_weeks
     if 'grid_weeks' in settings:
         settings['grid_weeks'] = max(1, min(4, int(settings['grid_weeks'])))
+    # Validate filter settings
+    if 'filter_unsharp_radius' in settings:
+        settings['filter_unsharp_radius'] = max(0.1, min(5.0, float(settings['filter_unsharp_radius'])))
+    if 'filter_unsharp_percent' in settings:
+        settings['filter_unsharp_percent'] = max(50, min(300, float(settings['filter_unsharp_percent'])))
+    if 'filter_unsharp_threshold' in settings:
+        settings['filter_unsharp_threshold'] = max(0, min(10, int(settings['filter_unsharp_threshold'])))
+    if 'filter_sharpness_factor' in settings:
+        settings['filter_sharpness_factor'] = max(0.0, min(2.0, float(settings['filter_sharpness_factor'])))
+    if 'filter_edge_enhance_type' in settings:
+        if settings['filter_edge_enhance_type'] not in ['normal', 'more']:
+            settings['filter_edge_enhance_type'] = 'more'
     save_settings(settings)
     return jsonify({'success': True, 'settings': settings})
 

@@ -111,6 +111,45 @@
             <label for="week_count">Number of Calendar Rows (weeks) to display:</label>
             <input type="number" id="week_count" name="week_count" min="1" max="6" step="1" value="{{ settings.week_count if settings.week_count is defined else 6 }}">
             <div style="font-size:0.9em;color:#888;margin-bottom:8px;">The calendar will always show exactly this many week rows, regardless of the month.</div>
+            
+            <hr style="margin:32px 0;border:none;border-top:1px solid #444;">
+            <h2 style="margin-top:0;">Post-Processing Filters (Text Rendering)</h2>
+            <div style="font-size:0.9em;color:#888;margin-bottom:16px;">Adjust filters to improve text rendering quality in screenshots.</div>
+            
+            <label for="filter_enable_unsharp">
+                <input type="checkbox" id="filter_enable_unsharp" name="filter_enable_unsharp" {% if settings.filter_enable_unsharp is not defined or settings.filter_enable_unsharp %}checked{% endif %}>
+                Enable Unsharp Mask
+            </label>
+            <div id="unsharp_settings" style="margin-left:24px;margin-top:8px;display:{% if settings.filter_enable_unsharp is not defined or settings.filter_enable_unsharp %}block{% else %}none{% endif %};">
+                <label for="filter_unsharp_radius" style="margin-top:8px;">Radius (0.1-5.0):</label>
+                <input type="number" id="filter_unsharp_radius" name="filter_unsharp_radius" min="0.1" max="5.0" step="0.1" value="{{ settings.filter_unsharp_radius if settings.filter_unsharp_radius is defined else 1.0 }}" style="width:100%;">
+                <label for="filter_unsharp_percent" style="margin-top:8px;">Percent (50-300):</label>
+                <input type="number" id="filter_unsharp_percent" name="filter_unsharp_percent" min="50" max="300" step="10" value="{{ settings.filter_unsharp_percent if settings.filter_unsharp_percent is defined else 150 }}" style="width:100%;">
+                <label for="filter_unsharp_threshold" style="margin-top:8px;">Threshold (0-10):</label>
+                <input type="number" id="filter_unsharp_threshold" name="filter_unsharp_threshold" min="0" max="10" step="1" value="{{ settings.filter_unsharp_threshold if settings.filter_unsharp_threshold is defined else 3 }}" style="width:100%;">
+            </div>
+            
+            <label for="filter_enable_edge_enhance" style="margin-top:16px;">
+                <input type="checkbox" id="filter_enable_edge_enhance" name="filter_enable_edge_enhance" {% if settings.filter_enable_edge_enhance is not defined or settings.filter_enable_edge_enhance %}checked{% endif %}>
+                Enable Edge Enhancement
+            </label>
+            <div id="edge_settings" style="margin-left:24px;margin-top:8px;display:{% if settings.filter_enable_edge_enhance is not defined or settings.filter_enable_edge_enhance %}block{% else %}none{% endif %};">
+                <label for="filter_edge_enhance_type" style="margin-top:8px;">Type:</label>
+                <select id="filter_edge_enhance_type" name="filter_edge_enhance_type" style="width:100%;">
+                    <option value="normal" {% if settings.filter_edge_enhance_type == 'normal' %}selected{% endif %}>Normal</option>
+                    <option value="more" {% if settings.filter_edge_enhance_type is not defined or settings.filter_edge_enhance_type == 'more' %}selected{% endif %}>More (Stronger)</option>
+                </select>
+            </div>
+            
+            <label for="filter_enable_sharpness" style="margin-top:16px;">
+                <input type="checkbox" id="filter_enable_sharpness" name="filter_enable_sharpness" {% if settings.filter_enable_sharpness is not defined or settings.filter_enable_sharpness %}checked{% endif %}>
+                Enable Sharpness Enhancement
+            </label>
+            <div id="sharpness_settings" style="margin-left:24px;margin-top:8px;display:{% if settings.filter_enable_sharpness is not defined or settings.filter_enable_sharpness %}block{% else %}none{% endif %};">
+                <label for="filter_sharpness_factor" style="margin-top:8px;">Factor (0.0-2.0):</label>
+                <input type="number" id="filter_sharpness_factor" name="filter_sharpness_factor" min="0.0" max="2.0" step="0.1" value="{{ settings.filter_sharpness_factor if settings.filter_sharpness_factor is defined else 1.3 }}" style="width:100%;">
+            </div>
+            
             <button type="submit">Save Settings</button>
             <div class="success" id="success-message" style="display:none;">Settings saved!</div>
         </form>
@@ -122,6 +161,17 @@
             document.getElementById('grid_weeks_label').style.display = isGrid ? 'block' : 'none';
             document.getElementById('grid_weeks').style.display = isGrid ? 'block' : 'none';
             document.getElementById('grid_weeks_help').style.display = isGrid ? 'block' : 'none';
+        });
+
+        // Show/hide filter settings based on checkboxes
+        document.getElementById('filter_enable_unsharp').addEventListener('change', function() {
+            document.getElementById('unsharp_settings').style.display = this.checked ? 'block' : 'none';
+        });
+        document.getElementById('filter_enable_edge_enhance').addEventListener('change', function() {
+            document.getElementById('edge_settings').style.display = this.checked ? 'block' : 'none';
+        });
+        document.getElementById('filter_enable_sharpness').addEventListener('change', function() {
+            document.getElementById('sharpness_settings').style.display = this.checked ? 'block' : 'none';
         });
 
         document.getElementById('settings-form').addEventListener('submit', function(e) {
@@ -139,7 +189,16 @@
                 wrap_event_titles: document.getElementById('wrap_event_titles').checked,
                 color_event_text: document.getElementById('color_event_text').checked,
                 calendar_ids: document.getElementById('calendar_ids').value.trim(),
-                calendar_colors: document.getElementById('calendar_colors').value
+                calendar_colors: document.getElementById('calendar_colors').value,
+                // Post-processing filter settings
+                filter_enable_unsharp: document.getElementById('filter_enable_unsharp').checked,
+                filter_unsharp_radius: parseFloat(document.getElementById('filter_unsharp_radius').value),
+                filter_unsharp_percent: parseFloat(document.getElementById('filter_unsharp_percent').value),
+                filter_unsharp_threshold: parseInt(document.getElementById('filter_unsharp_threshold').value),
+                filter_enable_edge_enhance: document.getElementById('filter_enable_edge_enhance').checked,
+                filter_edge_enhance_type: document.getElementById('filter_edge_enhance_type').value,
+                filter_enable_sharpness: document.getElementById('filter_enable_sharpness').checked,
+                filter_sharpness_factor: parseFloat(document.getElementById('filter_sharpness_factor').value)
             };
             fetch('/api/settings', {
                 method: 'POST',
