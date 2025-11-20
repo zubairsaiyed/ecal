@@ -179,22 +179,26 @@ def generate_calendar_screenshot(width=1600, height=1200):
         # Use --window-size to set viewport, and ensure full page capture
         # Note: --screenshot captures the viewport, so window-size must match exactly
         # Use --screenshot-full-page=false to capture only viewport (which is what we want)
-        # Use fallback approach: screenshot at 1600x1287 (add 87px to expected height)
-        # Then crop 87px from bottom to get final 1600x1200 image
+        # Use 2x device scale factor for better text rendering quality
+        # Render at 2x resolution, then downscale with high-quality resampling
+        device_scale_factor = 2
         screenshot_height = height + 87  # 1200 + 87 = 1287
-        log_info(f"Using fallback approach: screenshot at {width}x{screenshot_height}, will crop to {width}x{height}")
+        screenshot_width_2x = width * device_scale_factor  # 1600 * 2 = 3200
+        screenshot_height_2x = screenshot_height * device_scale_factor  # 1287 * 2 = 2574
+        log_info(f"Using 2x device scale factor for better text rendering")
+        log_info(f"Screenshot at 2x resolution: {screenshot_width_2x}x{screenshot_height_2x}, will downscale to {width}x{screenshot_height}, then crop to {width}x{height}")
         
         cmd = [
             "chromium-browser",
             "http://localhost:5000",  # Self-referencing URL
             "--headless=new",
             f"--screenshot={screenshot_path}",
-            f"--window-size={width},{screenshot_height}",
-            f"--viewport-size={width},{screenshot_height}",
-            f"--force-device-scale-factor=1",
-            "--disable-gpu",
-            # Note: --disable-gpu may affect font rendering quality but is often necessary for headless mode
-            # CSS text-rendering properties in the HTML should help compensate
+            f"--window-size={screenshot_width_2x},{screenshot_height_2x}",
+            f"--viewport-size={screenshot_width_2x},{screenshot_height_2x}",
+            f"--force-device-scale-factor={device_scale_factor}",
+            # Try without --disable-gpu for better font rendering quality
+            # If this causes issues in headless mode, uncomment the line below
+            # "--disable-gpu",
             "--no-sandbox",
             "--virtual-time-budget=8000",  # Wait 8 seconds for rendering and JS to complete
             "--hide-scrollbars",
@@ -216,24 +220,34 @@ def generate_calendar_screenshot(width=1600, height=1200):
             log_info(f"Screenshot failed: {result.stderr}")
             return None
         
-        # Verify and fix screenshot dimensions, and crop whitespace if needed
+        # Verify and fix screenshot dimensions, downscale from 2x, and crop whitespace if needed
         try:
             from PIL import Image as PILImage
             img = PILImage.open(screenshot_path)
             actual_width, actual_height = img.size
-            log_info(f"Screenshot dimensions: {actual_width}x{actual_height} (screenshot at {width}x{screenshot_height}, target: {width}x{height})")
+            log_info(f"Screenshot dimensions: {actual_width}x{actual_height} (expected 2x: {screenshot_width_2x}x{screenshot_height_2x})")
             
             # Convert to RGB if needed for processing
             if img.mode != 'RGB':
                 img = img.convert('RGB')
             
+            # Downscale from 2x resolution to 1x using high-quality LANCZOS resampling
+            if actual_width == screenshot_width_2x and actual_height == screenshot_height_2x:
+                log_info(f"Downscaling from 2x resolution ({actual_width}x{actual_height}) to 1x ({width}x{screenshot_height}) using LANCZOS resampling")
+                img = img.resize((width, screenshot_height), PILImage.Resampling.LANCZOS)
+                log_info(f"After downscale: {img.size[0]}x{img.size[1]}")
+            elif actual_width == width and actual_height == screenshot_height:
+                log_info(f"Screenshot already at 1x resolution ({width}x{screenshot_height}), skipping downscale")
+            else:
+                log_info(f"Warning: Unexpected screenshot dimensions ({actual_width}x{actual_height}), expected either {screenshot_width_2x}x{screenshot_height_2x} or {width}x{screenshot_height}")
+            
             # Crop 87px from bottom to get final 1600x1200 image
-            if actual_height >= height:
-                log_info(f"Cropping bottom 87px: from {actual_width}x{actual_height} to {width}x{height}")
+            if img.size[1] >= height:
+                log_info(f"Cropping bottom 87px: from {img.size[0]}x{img.size[1]} to {width}x{height}")
                 img = img.crop((0, 0, width, height))
                 log_info(f"After crop: {img.size[0]}x{img.size[1]}")
             else:
-                log_info(f"Warning: Screenshot height ({actual_height}) is less than target ({height}), cannot crop")
+                log_info(f"Warning: Image height ({img.size[1]}) is less than target ({height}), cannot crop")
             
             # COMMENTED OUT: Previous cropping and resizing logic to prevent stretching
             # # If screenshot is taller than expected, crop from bottom to exact height
