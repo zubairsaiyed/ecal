@@ -343,6 +343,18 @@
             return event.start && !event.start.includes('T');
         }
 
+        // Parse date string as local date (not UTC) to avoid timezone issues
+        function parseLocalDate(dateString) {
+            if (!dateString) return null;
+            // If it's a date-only string (YYYY-MM-DD), parse as local date
+            if (!dateString.includes('T')) {
+                const [year, month, day] = dateString.split('-').map(Number);
+                return new Date(year, month - 1, day);
+            }
+            // Otherwise parse normally (includes time)
+            return new Date(dateString);
+        }
+
         function getDateKey(date) {
             return date.toISOString().split('T')[0];
         }
@@ -388,8 +400,9 @@
             const eventsByDate = {};
             events.forEach(event => {
                 const isAllDay = isAllDayEvent(event);
-                const start = new Date(event.start);
-                let end = new Date(event.end || event.start);
+                // Parse dates as local dates to avoid timezone issues with all-day events
+                const start = parseLocalDate(event.start);
+                let end = parseLocalDate(event.end || event.start);
                 
                 // Handle multi-day events
                 const currentDate = new Date(start);
@@ -427,8 +440,8 @@
             // Sort events within each day
             Object.keys(eventsByDate).forEach(dateKey => {
                 eventsByDate[dateKey].sort((a, b) => {
-                    const aTime = isAllDayEvent(a) ? 0 : new Date(a.start).getTime();
-                    const bTime = isAllDayEvent(b) ? 0 : new Date(b.start).getTime();
+                    const aTime = isAllDayEvent(a) ? 0 : parseLocalDate(a.start).getTime();
+                    const bTime = isAllDayEvent(b) ? 0 : parseLocalDate(b.start).getTime();
                     return aTime - bTime;
                 });
             });
@@ -462,8 +475,8 @@
                 const dayEvents = eventsByDate[dateKey] || [];
                 dayEvents.forEach(event => {
                     // Check if event is in the past
-                    const eventStart = new Date(event.start);
-                    const eventEnd = new Date(event.end || event.start);
+                    const eventStart = parseLocalDate(event.start);
+                    const eventEnd = parseLocalDate(event.end || event.start);
                     const now = new Date();
                     const isEventPast = eventEnd < now;
                     
