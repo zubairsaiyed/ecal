@@ -561,45 +561,74 @@
             grid.style.height = `${availableHeight}px`;
             grid.style.maxHeight = `${availableHeight}px`;
             
-            // Always distribute space to fill the entire available height
-            if (availableHeight > totalMinHeight) {
-                const extraSpace = availableHeight - totalMinHeight;
+            // Start with equal heights for all rows (default)
+            const equalRowHeight = (availableHeight - totalGaps) / totalRows;
+            const finalHeights = new Array(totalRows).fill(equalRowHeight);
+            
+            // Calculate how much extra space each row needs beyond equal height
+            const rowExtraNeeded = rowMinHeights.map((minHeight, index) => {
+                return Math.max(0, minHeight - equalRowHeight);
+            });
+            
+            // Total extra space needed
+            const totalExtraNeeded = rowExtraNeeded.reduce((sum, extra) => sum + extra, 0);
+            
+            // If we have extra space available, expand rows from top to bottom
+            if (totalExtraNeeded > 0) {
+                // Calculate available space for expansion
+                const spaceForExpansion = availableHeight - totalGaps - (equalRowHeight * totalRows);
                 
-                // Calculate priority weights for each row (earlier rows get more)
-                const weights = rows.map((_, index) => Math.pow(0.7, index));
-                const totalWeight = weights.reduce((sum, w) => sum + w, 0);
-                
-                // Distribute extra space proportionally based on weights
-                const rowHeights = rowMinHeights.map((minHeight, index) => {
-                    const weight = weights[index];
-                    const extraForThisRow = (extraSpace * weight) / totalWeight;
-                    return minHeight + extraForThisRow;
-                });
-                
-                // Normalize to ensure total equals availableHeight exactly (accounting for gaps)
-                const totalRowHeights = rowHeights.reduce((sum, h) => sum + h, 0);
-                const totalWithGaps = totalRowHeights + totalGaps;
-                const scaleFactor = availableHeight / totalWithGaps;
-                const finalHeights = rowHeights.map(h => h * scaleFactor);
-                
-                // Verify the total matches exactly
-                const finalTotal = finalHeights.reduce((sum, h) => sum + h, 0) + totalGaps;
-                if (Math.abs(finalTotal - availableHeight) > 0.1) {
-                    // Adjust to account for rounding errors
-                    const adjustment = (availableHeight - finalTotal) / totalRows;
-                    finalHeights.forEach((h, i) => {
-                        finalHeights[i] = h + adjustment;
-                    });
+                // Distribute expansion space from top to bottom
+                // Each row gets what it needs before lower rows get any
+                let remainingExpansion = spaceForExpansion;
+                for (let i = 0; i < totalRows; i++) {
+                    if (rowExtraNeeded[i] > 0 && remainingExpansion > 0) {
+                        const expansion = Math.min(rowExtraNeeded[i], remainingExpansion);
+                        finalHeights[i] = equalRowHeight + expansion;
+                        remainingExpansion -= expansion;
+                    }
                 }
                 
-                // Apply heights to rows
-                rows.forEach((rowCells, rowIndex) => {
-                    const rowHeight = finalHeights[rowIndex];
-                    rowCells.forEach(cell => {
-                        cell.style.height = `${rowHeight}px`;
+                // If there's still remaining space after all rows got what they needed,
+                // distribute it equally to all rows
+                if (remainingExpansion > 0) {
+                    const equalShare = remainingExpansion / totalRows;
+                    finalHeights.forEach((height, index) => {
+                        finalHeights[index] = height + equalShare;
                     });
-                });
+                }
             } else {
+                // No extra space needed, all rows stay at equal height
+                // If there's extra space, distribute equally
+                const totalUsed = equalRowHeight * totalRows;
+                const extraSpace = availableHeight - totalGaps - totalUsed;
+                if (extraSpace > 0) {
+                    const equalShare = extraSpace / totalRows;
+                    finalHeights.forEach((height, index) => {
+                        finalHeights[index] = height + equalShare;
+                    });
+                }
+            }
+            
+            // Normalize to ensure total equals availableHeight exactly (accounting for gaps)
+            const totalRowHeights = finalHeights.reduce((sum, h) => sum + h, 0);
+            const totalWithGaps = totalRowHeights + totalGaps;
+            if (Math.abs(totalWithGaps - availableHeight) > 0.1) {
+                const scaleFactor = (availableHeight - totalGaps) / totalRowHeights;
+                finalHeights.forEach((h, i) => {
+                    finalHeights[i] = h * scaleFactor;
+                });
+            }
+            
+            // Apply heights to rows
+            rows.forEach((rowCells, rowIndex) => {
+                const rowHeight = finalHeights[rowIndex];
+                rowCells.forEach(cell => {
+                    cell.style.height = `${rowHeight}px`;
+                });
+            });
+            
+            if (availableHeight <= totalMinHeight) {
                 // Not enough space - scale down proportionally to fit
                 const scaleFactor = (availableHeight - totalGaps) / (totalMinHeight - totalGaps);
                 rows.forEach((rowCells, rowIndex) => {
