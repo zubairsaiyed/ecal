@@ -193,6 +193,8 @@ def generate_calendar_screenshot(width=1600, height=1200):
             f"--viewport-size={width},{screenshot_height}",
             f"--force-device-scale-factor=1",
             "--disable-gpu",
+            # Note: --disable-gpu may affect font rendering quality but is often necessary for headless mode
+            # CSS text-rendering properties in the HTML should help compensate
             "--no-sandbox",
             "--virtual-time-budget=8000",  # Wait 8 seconds for rendering and JS to complete
             "--hide-scrollbars",
