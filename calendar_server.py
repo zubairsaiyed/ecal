@@ -154,6 +154,7 @@ screenshot_cache = {
     'path': None,
     'hash': None,
     'events_hash': None,  # Hash of calendar events to detect changes
+    'last_date': None,  # Last date used to generate screenshot (YYYY-MM-DD format)
     'lock': threading.Lock()
 }
 
@@ -589,8 +590,11 @@ def get_calendar_image():
 
 @app.route('/image/hash')
 def get_calendar_image_hash():
-    """Get the hash of the current calendar image - only regenerates if events changed"""
+    """Get the hash of the current calendar image - regenerates if events changed or date changed"""
     with screenshot_cache['lock']:
+        # Get current date (YYYY-MM-DD format) to detect day changes
+        current_date = datetime.now().strftime('%Y-%m-%d')
+        
         # Check if calendar events have changed by comparing event hashes
         service, error = get_google_calendar_service()
         if error or not service:
@@ -610,16 +614,22 @@ def get_calendar_image_hash():
         
         current_events_hash = compute_events_hash(events)
         
-        # Only regenerate screenshot if events have changed
-        if screenshot_cache['events_hash'] == current_events_hash:
-            # Events haven't changed, return cached hash
+        # Check if events changed OR date changed
+        events_changed = screenshot_cache['events_hash'] != current_events_hash
+        date_changed = screenshot_cache['last_date'] != current_date
+        
+        if not events_changed and not date_changed:
+            # Neither events nor date changed, return cached hash
             if screenshot_cache['hash']:
                 return jsonify({'hash': screenshot_cache['hash']})
             # No cached hash, need to generate one
             log_info("No cached hash available, generating screenshot...")
         else:
-            # Events have changed, regenerate screenshot
-            log_info(f"Calendar events changed (old hash: {screenshot_cache['events_hash'][:16] if screenshot_cache['events_hash'] else 'none'}..., new hash: {current_events_hash[:16]}...), regenerating screenshot...")
+            # Events or date changed, regenerate screenshot
+            if events_changed:
+                log_info(f"Calendar events changed (old hash: {screenshot_cache['events_hash'][:16] if screenshot_cache['events_hash'] else 'none'}..., new hash: {current_events_hash[:16]}...), regenerating screenshot...")
+            if date_changed:
+                log_info(f"Date changed (old: {screenshot_cache['last_date']}, new: {current_date}), regenerating screenshot...")
         
         # Generate new screenshot
         result = generate_calendar_screenshot()
@@ -639,10 +649,11 @@ def get_calendar_image_hash():
             except Exception as e:
                 log_info(f"Warning: Could not remove old screenshot: {e}")
         
-        # Update cache with new screenshot and events hash
+        # Update cache with new screenshot, events hash, and current date
         screenshot_cache['path'] = screenshot_path
         screenshot_cache['hash'] = image_hash
         screenshot_cache['events_hash'] = current_events_hash
+        screenshot_cache['last_date'] = current_date
         
         return jsonify({'hash': image_hash})
 
