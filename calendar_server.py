@@ -15,6 +15,7 @@ import sys
 import logging
 import time
 import queue
+import re
 import requests
 
 app = Flask(__name__)
@@ -624,8 +625,25 @@ def api_weather():
                 log_info(f"WEATHER ERROR - {error_msg}")
                 return jsonify({'error': error_msg}), 404
         
-        # Fetch forecast data from Open-Meteo (16-day forecast available)
+        # Fetch forecast data from Open-Meteo (16-day forecast available, but limited by API)
+        # Open-Meteo typically supports forecasts up to 16 days, but may have date range limits
         forecast_url = "https://api.open-meteo.com/v1/forecast"
+        
+        # Clamp end_date to today + 16 days maximum (Open-Meteo's typical limit)
+        today = date.today()
+        max_end_date = today + timedelta(days=16)
+        if end_date > max_end_date:
+            log_info(f"Clamping end_date from {end_date_str} to {max_end_date.isoformat()} (API limit)")
+            end_date = max_end_date
+            end_date_str = end_date.isoformat()
+        
+        # Also ensure start_date is not in the past beyond reasonable limits
+        min_start_date = today - timedelta(days=1)  # Allow yesterday for timezone edge cases
+        if start_date < min_start_date:
+            log_info(f"Adjusting start_date from {start_date_str} to {min_start_date.isoformat()}")
+            start_date = min_start_date
+            start_date_str = start_date.isoformat()
+        
         forecast_params = {
             'latitude': lat,
             'longitude': lon,
@@ -639,6 +657,29 @@ def api_weather():
         try:
             log_info(f"Fetching weather forecast for coordinates {lat}, {lon} from {start_date_str} to {end_date_str}")
             forecast_response = requests.get(forecast_url, params=forecast_params, timeout=10)
+            
+            # Check if we got an error response about date range
+            if forecast_response.status_code == 400:
+                forecast_data = forecast_response.json()
+                if forecast_data.get('error') and 'out of allowed range' in forecast_data.get('reason', ''):
+                    # Parse the allowed range from the error message
+                    reason = forecast_data.get('reason', '')
+                    log_info(f"WEATHER ERROR - Date range issue: {reason}")
+                    # Try to extract the max date from the error message
+                    # Format: "Parameter 'end_date' is out of allowed range from YYYY-MM-DD to YYYY-MM-DD"
+                    date_range_match = re.search(r'to (\d{4}-\d{2}-\d{2})', reason)
+                    if date_range_match:
+                        max_allowed_date_str = date_range_match.group(1)
+                        max_allowed_date = datetime.fromisoformat(max_allowed_date_str).date()
+                        if end_date > max_allowed_date:
+                            log_info(f"Adjusting end_date to API maximum: {max_allowed_date.isoformat()}")
+                            end_date = max_allowed_date
+                            end_date_str = end_date.isoformat()
+                            # Retry with adjusted date
+                            forecast_params['end_date'] = end_date_str
+                            log_info(f"Retrying forecast request with end_date: {end_date_str}")
+                            forecast_response = requests.get(forecast_url, params=forecast_params, timeout=10)
+            
             forecast_response.raise_for_status()
             forecast_data = forecast_response.json()
             
