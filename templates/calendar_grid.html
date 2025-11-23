@@ -391,13 +391,13 @@
             try {
                 const response = await fetch(`/api/weather?start_date=${startDateStr}&end_date=${endDateStr}`);
                 if (!response.ok) {
-                    console.warn('Weather API error, using fallback');
-                    return getMockWeatherDataFallback(startDate, endDate);
+                    console.warn('Weather API error, returning null data (will show dashes)');
+                    return getNullWeatherData(startDate, endDate);
                 }
                 const data = await response.json();
                 if (data.error) {
                     console.warn('Weather API error:', data.error);
-                    return getMockWeatherDataFallback(startDate, endDate);
+                    return getNullWeatherData(startDate, endDate);
                 }
                 // Cache the data
                 weatherCache = data;
@@ -405,17 +405,17 @@
                 return data;
             } catch (error) {
                 console.warn('Weather fetch error:', error);
-                return getMockWeatherDataFallback(startDate, endDate);
+                return getNullWeatherData(startDate, endDate);
             }
         }
 
-        // Fallback mock weather data generator
-        function getMockWeatherDataFallback(startDate, endDate) {
+        // Return null weather data (will display as dashes)
+        function getNullWeatherData(startDate, endDate) {
             const result = {};
             const currentDate = new Date(startDate);
             while (currentDate <= endDate) {
                 const dateKey = getDateKey(currentDate);
-                result[dateKey] = getMockWeatherForDate(dateKey);
+                result[dateKey] = null;  // Will display as dashes
                 currentDate.setDate(currentDate.getDate() + 1);
             }
             return result;
@@ -601,24 +601,45 @@
                 weatherInfo.className = 'weather-info';
                 
                 // Get weather data for this date
-                const dateWeather = weatherData[dateKey] || getMockWeatherForDate(dateKey);
+                const dateWeather = weatherData[dateKey];
                 
-                const weatherIcon = document.createElement('div');
-                weatherIcon.className = 'weather-icon';
-                weatherIcon.textContent = dateWeather.icon || '☀️';
-                weatherInfo.appendChild(weatherIcon);
-                
-                const weatherTemps = document.createElement('div');
-                weatherTemps.className = 'weather-temps';
-                const highSpan = document.createElement('span');
-                highSpan.className = 'weather-high';
-                highSpan.textContent = dateWeather.high + '°';
-                const lowSpan = document.createElement('span');
-                lowSpan.className = 'weather-low';
-                lowSpan.textContent = dateWeather.low + '°';
-                weatherTemps.appendChild(highSpan);
-                weatherTemps.appendChild(lowSpan);
-                weatherInfo.appendChild(weatherTemps);
+                if (dateWeather && dateWeather.high !== null && dateWeather.low !== null) {
+                    // Valid weather data available
+                    const weatherIcon = document.createElement('div');
+                    weatherIcon.className = 'weather-icon';
+                    weatherIcon.textContent = dateWeather.icon || '☀️';
+                    weatherInfo.appendChild(weatherIcon);
+                    
+                    const weatherTemps = document.createElement('div');
+                    weatherTemps.className = 'weather-temps';
+                    const highSpan = document.createElement('span');
+                    highSpan.className = 'weather-high';
+                    highSpan.textContent = dateWeather.high + '°';
+                    const lowSpan = document.createElement('span');
+                    lowSpan.className = 'weather-low';
+                    lowSpan.textContent = dateWeather.low + '°';
+                    weatherTemps.appendChild(highSpan);
+                    weatherTemps.appendChild(lowSpan);
+                    weatherInfo.appendChild(weatherTemps);
+                } else {
+                    // No weather data available - show dashes
+                    const weatherIcon = document.createElement('div');
+                    weatherIcon.className = 'weather-icon';
+                    weatherIcon.textContent = '—';
+                    weatherInfo.appendChild(weatherIcon);
+                    
+                    const weatherTemps = document.createElement('div');
+                    weatherTemps.className = 'weather-temps';
+                    const highSpan = document.createElement('span');
+                    highSpan.className = 'weather-high';
+                    highSpan.textContent = '—';
+                    const lowSpan = document.createElement('span');
+                    lowSpan.className = 'weather-low';
+                    lowSpan.textContent = '—';
+                    weatherTemps.appendChild(highSpan);
+                    weatherTemps.appendChild(lowSpan);
+                    weatherInfo.appendChild(weatherTemps);
+                }
                 
                 dayHeader.appendChild(weatherInfo);
                 dayCell.appendChild(dayHeader);

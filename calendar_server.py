@@ -604,26 +604,26 @@ def api_weather():
                         'icon': get_weather_icon_from_wmo_code(weather_codes[i])
                     }
             
-            # Fill in any missing dates in the range with mock data
+            # Fill in any missing dates in the range with null values (will display as dashes)
             current_date = start_date
             while current_date <= end_date:
                 date_key = current_date.isoformat()
                 if date_key not in result:
-                    result[date_key] = get_mock_weather_for_date(date_key)
+                    result[date_key] = None  # Will display as dashes
                 current_date += timedelta(days=1)
             
             return jsonify(result)
             
         except requests.exceptions.RequestException as e:
             log_info(f"Weather API error: {e}")
-            # Fallback to mock data on API error
-            log_info("Falling back to mock weather data")
-            return get_mock_weather_data(start_date, end_date, location)
+            # Return null values for all dates to show dashes
+            log_info("Returning null weather data (will display as dashes)")
+            return get_null_weather_data(start_date, end_date)
         except Exception as e:
             log_info(f"Weather processing error: {e}")
-            # Fallback to mock data on processing error
-            log_info("Falling back to mock weather data")
-            return get_mock_weather_data(start_date, end_date, location)
+            # Return null values for all dates to show dashes
+            log_info("Returning null weather data (will display as dashes)")
+            return get_null_weather_data(start_date, end_date)
             
     except Exception as e:
         log_info(f"Weather endpoint error: {e}")
@@ -662,13 +662,13 @@ def get_weather_icon_from_wmo_code(wmo_code):
     else:
         return '☁️'  # Default cloudy
 
-def get_mock_weather_data(start_date, end_date, location):
-    """Generate mock weather data for date range"""
+def get_null_weather_data(start_date, end_date):
+    """Return null weather data for date range (will display as dashes)"""
     result = {}
     current_date = start_date
     while current_date <= end_date:
         date_key = current_date.isoformat()
-        result[date_key] = get_mock_weather_for_date(date_key)
+        result[date_key] = None  # Will display as dashes
         current_date += timedelta(days=1)
     return jsonify(result)
 
