@@ -517,7 +517,9 @@ def api_weather():
     location = settings.get('weather_location', '').strip()
     
     if not location:
-        return jsonify({'error': 'Weather location not configured'}), 400
+        error_msg = 'Weather location not configured in settings'
+        log_info(f"WEATHER ERROR - {error_msg}")
+        return jsonify({'error': error_msg}), 400
     
     # Get date range from query params (default to next 16 days)
     start_date_str = request.args.get('start_date')
@@ -547,7 +549,11 @@ def api_weather():
             except ValueError:
                 return jsonify({'error': 'Invalid coordinates format. Use "lat,lon" (e.g., "40.7128,-74.0060")'}), 400
         else:
-            # Geocode location to get coordinates using Open-Meteo geocoding API
+            # Geocode location to get coordinates using Open-Meteo geocoding API first
+            lat = None
+            lon = None
+            
+            # Try Open-Meteo geocoding first
             geocode_url = "https://geocoding-api.open-meteo.com/v1/search"
             geocode_params = {
                 'name': location,
@@ -559,14 +565,64 @@ def api_weather():
                 geocode_response = requests.get(geocode_url, params=geocode_params, timeout=5)
                 geocode_response.raise_for_status()
                 geocode_data = geocode_response.json()
-                if not geocode_data.get('results') or len(geocode_data['results']) == 0:
-                    return jsonify({'error': f'Location not found: {location}'}), 404
-                lat = geocode_data['results'][0]['latitude']
-                lon = geocode_data['results'][0]['longitude']
-                log_info(f"Geocoded '{location}' to coordinates: {lat}, {lon}")
+                log_info(f"Open-Meteo geocoding API response for '{location}': {geocode_data}")
+                if geocode_data.get('results') and len(geocode_data['results']) > 0:
+                    lat = geocode_data['results'][0]['latitude']
+                    lon = geocode_data['results'][0]['longitude']
+                    log_info(f"Geocoded '{location}' to coordinates using Open-Meteo: {lat}, {lon}")
             except Exception as e:
-                log_info(f"Geocoding error: {e}")
-                return jsonify({'error': f'Failed to geocode location: {str(e)}'}), 500
+                log_info(f"Open-Meteo geocoding failed for '{location}': {e}")
+            
+            # Fallback to Nominatim (OpenStreetMap) if Open-Meteo didn't find it
+            if lat is None or lon is None:
+                log_info(f"Trying Nominatim geocoding as fallback for '{location}'")
+                try:
+                    nominatim_url = "https://nominatim.openstreetmap.org/search"
+                    nominatim_params = {
+                        'q': location,
+                        'format': 'json',
+                        'limit': 1,
+                        'addressdetails': 0
+                    }
+                    nominatim_response = requests.get(
+                        nominatim_url, 
+                        params=nominatim_params, 
+                        timeout=5,
+                        headers={'User-Agent': 'ECAL-Calendar/1.0'}  # Required by Nominatim
+                    )
+                    nominatim_response.raise_for_status()
+                    nominatim_data = nominatim_response.json()
+                    log_info(f"Nominatim geocoding API response for '{location}': {nominatim_data}")
+                    if nominatim_data and len(nominatim_data) > 0:
+                        lat = float(nominatim_data[0]['lat'])
+                        lon = float(nominatim_data[0]['lon'])
+                        log_info(f"Geocoded '{location}' to coordinates using Nominatim: {lat}, {lon}")
+                    else:
+                        error_msg = f'Location not found by any geocoding service: {location}'
+                        log_info(f"WEATHER ERROR - {error_msg}")
+                        log_info(f"WEATHER ERROR - Open-Meteo returned: {geocode_data if 'geocode_data' in locals() else 'N/A'}")
+                        log_info(f"WEATHER ERROR - Nominatim returned: {nominatim_data}")
+                        return jsonify({'error': error_msg}), 404
+                except requests.exceptions.RequestException as e:
+                    error_msg = f"Geocoding API request failed for location '{location}': {str(e)}"
+                    if hasattr(e, 'response') and e.response is not None:
+                        error_msg += f" (Status: {e.response.status_code}, Response: {e.response.text[:200]})"
+                    log_info(f"WEATHER ERROR - {error_msg}")
+                    import traceback
+                    log_info(f"WEATHER ERROR - Traceback: {traceback.format_exc()}")
+                    return jsonify({'error': f'Failed to geocode location: {str(e)}'}), 500
+                except Exception as e:
+                    error_msg = f"Geocoding error for location '{location}': {str(e)}"
+                    log_info(f"WEATHER ERROR - {error_msg}")
+                    import traceback
+                    log_info(f"WEATHER ERROR - Traceback: {traceback.format_exc()}")
+                    return jsonify({'error': f'Failed to geocode location: {str(e)}'}), 500
+            
+            # If we still don't have coordinates, return error
+            if lat is None or lon is None:
+                error_msg = f'Location not found: {location}'
+                log_info(f"WEATHER ERROR - {error_msg}")
+                return jsonify({'error': error_msg}), 404
         
         # Fetch forecast data from Open-Meteo (16-day forecast available)
         forecast_url = "https://api.open-meteo.com/v1/forecast"
@@ -581,11 +637,14 @@ def api_weather():
         }
         
         try:
+            log_info(f"Fetching weather forecast for coordinates {lat}, {lon} from {start_date_str} to {end_date_str}")
             forecast_response = requests.get(forecast_url, params=forecast_params, timeout=10)
             forecast_response.raise_for_status()
             forecast_data = forecast_response.json()
             
             if 'daily' not in forecast_data:
+                error_msg = f"Invalid response from weather API: missing 'daily' key. Response keys: {list(forecast_data.keys())}"
+                log_info(f"WEATHER ERROR - {error_msg}")
                 return jsonify({'error': 'Invalid response from weather API'}), 500
             
             daily_data = forecast_data['daily']
@@ -593,6 +652,8 @@ def api_weather():
             temps_max = daily_data.get('temperature_2m_max', [])
             temps_min = daily_data.get('temperature_2m_min', [])
             weather_codes = daily_data.get('weather_code', [])
+            
+            log_info(f"Weather API returned {len(dates)} days of data")
             
             # Build result dictionary
             result = {}
@@ -612,21 +673,43 @@ def api_weather():
                     result[date_key] = None  # Will display as dashes
                 current_date += timedelta(days=1)
             
+            log_info(f"Weather data prepared for {len(result)} days")
             return jsonify(result)
             
+        except requests.exceptions.Timeout as e:
+            error_msg = f"Weather API timeout after 10 seconds for coordinates {lat}, {lon}"
+            log_info(f"WEATHER ERROR - {error_msg}")
+            import traceback
+            log_info(f"WEATHER ERROR - Traceback: {traceback.format_exc()}")
+            return get_null_weather_data(start_date, end_date)
+        except requests.exceptions.HTTPError as e:
+            error_msg = f"Weather API HTTP error for coordinates {lat}, {lon}: {str(e)}"
+            if hasattr(e, 'response') and e.response is not None:
+                error_msg += f" (Status: {e.response.status_code}, Response: {e.response.text[:500]})"
+            log_info(f"WEATHER ERROR - {error_msg}")
+            import traceback
+            log_info(f"WEATHER ERROR - Traceback: {traceback.format_exc()}")
+            return get_null_weather_data(start_date, end_date)
         except requests.exceptions.RequestException as e:
-            log_info(f"Weather API error: {e}")
-            # Return null values for all dates to show dashes
-            log_info("Returning null weather data (will display as dashes)")
+            error_msg = f"Weather API request failed for coordinates {lat}, {lon}: {str(e)}"
+            if hasattr(e, 'response') and e.response is not None:
+                error_msg += f" (Status: {e.response.status_code if e.response else 'N/A'}, Response: {e.response.text[:500] if e.response else 'N/A'})"
+            log_info(f"WEATHER ERROR - {error_msg}")
+            import traceback
+            log_info(f"WEATHER ERROR - Traceback: {traceback.format_exc()}")
             return get_null_weather_data(start_date, end_date)
         except Exception as e:
-            log_info(f"Weather processing error: {e}")
-            # Return null values for all dates to show dashes
-            log_info("Returning null weather data (will display as dashes)")
+            error_msg = f"Weather processing error for coordinates {lat}, {lon}: {str(e)}"
+            log_info(f"WEATHER ERROR - {error_msg}")
+            import traceback
+            log_info(f"WEATHER ERROR - Traceback: {traceback.format_exc()}")
             return get_null_weather_data(start_date, end_date)
             
     except Exception as e:
-        log_info(f"Weather endpoint error: {e}")
+        error_msg = f"Weather endpoint error: {str(e)}"
+        log_info(f"WEATHER ERROR - {error_msg}")
+        import traceback
+        log_info(f"WEATHER ERROR - Traceback: {traceback.format_exc()}")
         return jsonify({'error': str(e)}), 500
 
 def get_weather_icon_from_wmo_code(wmo_code):
