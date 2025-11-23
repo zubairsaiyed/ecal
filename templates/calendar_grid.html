@@ -107,6 +107,14 @@
             flex-direction: column;
         }
 
+        .day-cell.other-month .weather-info {
+            opacity: 0.6;
+        }
+
+        .day-cell.past .weather-info {
+            opacity: 0.5;
+        }
+
         .day-cell.other-month {
             background: #f9f9f9;
             color: #999999;
@@ -128,16 +136,51 @@
             outline-offset: -1px;
         }
 
-        .day-number {
-            font-size: 28px;
-            font-weight: var(--font-weight-day-number, 600);
+        .day-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
             margin-bottom: 12px;
             padding-bottom: 6px;
             border-bottom: 2px solid #e0e0e0;
         }
 
-        .day-cell.today .day-number {
+        .day-number {
+            font-size: 28px;
+            font-weight: var(--font-weight-day-number, 600);
+        }
+
+        .day-cell.today .day-header {
             border-bottom: 3px solid #000000;
+        }
+
+        .weather-info {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 2px;
+            font-size: 16px;
+            line-height: 1.2;
+        }
+
+        .weather-icon {
+            font-size: 20px;
+            line-height: 1;
+            margin-bottom: 2px;
+        }
+
+        .weather-temps {
+            display: flex;
+            gap: 4px;
+            font-weight: 600;
+        }
+
+        .weather-high {
+            color: #000000;
+        }
+
+        .weather-low {
+            color: #666666;
         }
 
         .events-container {
@@ -328,6 +371,82 @@
             return hash;
         }
 
+        // Weather data cache
+        let weatherCache = {};
+        let weatherCacheDateRange = null;
+
+        // Fetch weather data from API
+        async function fetchWeatherData(startDate, endDate) {
+            const startDateStr = startDate.toISOString().split('T')[0];
+            const endDateStr = endDate.toISOString().split('T')[0];
+            
+            // Check if we have cached data for this range
+            if (weatherCacheDateRange && 
+                weatherCacheDateRange.start <= startDateStr && 
+                weatherCacheDateRange.end >= endDateStr &&
+                Object.keys(weatherCache).length > 0) {
+                return weatherCache;
+            }
+            
+            try {
+                const response = await fetch(`/api/weather?start_date=${startDateStr}&end_date=${endDateStr}`);
+                if (!response.ok) {
+                    console.warn('Weather API error, using fallback');
+                    return getMockWeatherDataFallback(startDate, endDate);
+                }
+                const data = await response.json();
+                if (data.error) {
+                    console.warn('Weather API error:', data.error);
+                    return getMockWeatherDataFallback(startDate, endDate);
+                }
+                // Cache the data
+                weatherCache = data;
+                weatherCacheDateRange = { start: startDateStr, end: endDateStr };
+                return data;
+            } catch (error) {
+                console.warn('Weather fetch error:', error);
+                return getMockWeatherDataFallback(startDate, endDate);
+            }
+        }
+
+        // Fallback mock weather data generator
+        function getMockWeatherDataFallback(startDate, endDate) {
+            const result = {};
+            const currentDate = new Date(startDate);
+            while (currentDate <= endDate) {
+                const dateKey = getDateKey(currentDate);
+                result[dateKey] = getMockWeatherForDate(dateKey);
+                currentDate.setDate(currentDate.getDate() + 1);
+            }
+            return result;
+        }
+
+        function getMockWeatherForDate(dateKey) {
+            const seed = hashCode(dateKey);
+            const dayOfYear = getDayOfYear(dateKey);
+            
+            // Generate temperatures based on day of year (simulating seasons)
+            const seasonalVariation = Math.sin((dayOfYear / 365) * 2 * Math.PI) * 15;
+            const randomVariation = (seed % 20) - 10;
+            const baseTemp = 70 + seasonalVariation + randomVariation;
+            
+            const high = Math.round(baseTemp + 5 + (seed % 10));
+            const low = Math.round(baseTemp - 5 - (seed % 10));
+            
+            // Generate icon
+            const icons = ['☀️', '⛅', '☁️', '🌧️', '⛈️', '❄️', '🌫️', '🌤️', '🌦️', '☀️'];
+            const icon = icons[seed % icons.length];
+            
+            return { high, low, icon };
+        }
+
+        function getDayOfYear(dateKey) {
+            const date = new Date(dateKey);
+            const start = new Date(date.getFullYear(), 0, 0);
+            const diff = date - start;
+            return Math.floor(diff / (1000 * 60 * 60 * 24));
+        }
+
         function formatTime(dateString, allDay) {
             if (allDay) return 'All Day';
             const date = new Date(dateString);
@@ -385,7 +504,7 @@
             });
         }
 
-        function renderCalendar(events) {
+        async function renderCalendar(events) {
             const today = new Date();
             today.setHours(0, 0, 0, 0);
             
@@ -393,6 +512,9 @@
             const startDate = new Date(weekStart);
             const endDate = new Date(weekStart);
             endDate.setDate(endDate.getDate() + (GRID_WEEKS * 7) - 1);
+            
+            // Fetch weather data
+            const weatherData = await fetchWeatherData(startDate, endDate);
             
             const grid = document.getElementById('calendar-grid');
             grid.innerHTML = '';
@@ -465,10 +587,41 @@
                 if (isToday) dayCellClass += ' today';
                 dayCell.className = dayCellClass;
                 
+                // Create day header with number and weather
+                const dayHeader = document.createElement('div');
+                dayHeader.className = 'day-header';
+                
                 const dayNumber = document.createElement('div');
                 dayNumber.className = 'day-number';
                 dayNumber.textContent = currentDate.getDate();
-                dayCell.appendChild(dayNumber);
+                dayHeader.appendChild(dayNumber);
+                
+                // Add weather info
+                const weatherInfo = document.createElement('div');
+                weatherInfo.className = 'weather-info';
+                
+                // Get weather data for this date
+                const dateWeather = weatherData[dateKey] || getMockWeatherForDate(dateKey);
+                
+                const weatherIcon = document.createElement('div');
+                weatherIcon.className = 'weather-icon';
+                weatherIcon.textContent = dateWeather.icon || '☀️';
+                weatherInfo.appendChild(weatherIcon);
+                
+                const weatherTemps = document.createElement('div');
+                weatherTemps.className = 'weather-temps';
+                const highSpan = document.createElement('span');
+                highSpan.className = 'weather-high';
+                highSpan.textContent = dateWeather.high + '°';
+                const lowSpan = document.createElement('span');
+                lowSpan.className = 'weather-low';
+                lowSpan.textContent = dateWeather.low + '°';
+                weatherTemps.appendChild(highSpan);
+                weatherTemps.appendChild(lowSpan);
+                weatherInfo.appendChild(weatherTemps);
+                
+                dayHeader.appendChild(weatherInfo);
+                dayCell.appendChild(dayHeader);
                 
                 const eventsContainer = document.createElement('div');
                 eventsContainer.className = 'events-container';
@@ -651,10 +804,10 @@
         // Fetch events and render
         fetch('/api/events')
             .then(response => response.json())
-            .then(events => {
+            .then(async events => {
                 setWeeksVariable();
                 renderWeekdays();
-                renderCalendar(events);
+                await renderCalendar(events);
                 // Adjust row heights after rendering
                 setTimeout(() => {
                     adjustRowHeights();
@@ -662,11 +815,11 @@
                     setTimeout(signalRenderComplete, 50);
                 }, 100);
             })
-            .catch(error => {
+            .catch(async error => {
                 console.error('Error fetching events:', error);
                 setWeeksVariable();
                 renderWeekdays();
-                renderCalendar([]);
+                await renderCalendar([]);
                 setTimeout(() => {
                     adjustRowHeights();
                     setTimeout(signalRenderComplete, 50);

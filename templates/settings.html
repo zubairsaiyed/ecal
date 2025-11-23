@@ -114,6 +114,18 @@
             <textarea id="calendar_ids" name="calendar_ids" rows="2" style="width:100%;font-size:1em;">{{ settings.calendar_ids if settings.calendar_ids is defined else '' }}</textarea>
             <button type="button" id="fetch-calendars" style="margin-top:8px;">Auto-populate from Google</button>
             <div id="calendar-list" style="font-size:0.95em;color:#aaa;margin-top:6px;"></div>
+            
+            <hr style="margin:32px 0;border:none;border-top:1px solid #444;">
+            <h2 style="margin-top:0;">Weather Settings</h2>
+            <div style="font-size:0.9em;color:#888;margin-bottom:16px;">Configure weather display for the calendar grid view.</div>
+            
+            <label for="weather_location">Weather Location:</label>
+            <input type="text" id="weather_location" name="weather_location" value="{{ settings.weather_location if settings.weather_location is defined else '' }}" style="width:100%;font-size:1em;padding:8px;">
+            <div style="font-size:0.9em;color:#888;margin-top:8px;">City name (e.g., "New York,NY,US") or coordinates (e.g., "40.7128,-74.0060")</div>
+            
+            <label for="weather_api_key" style="margin-top:16px;">OpenWeatherMap API Key (optional):</label>
+            <input type="text" id="weather_api_key" name="weather_api_key" value="{{ settings.weather_api_key if settings.weather_api_key is defined else '' }}" style="width:100%;font-size:1em;padding:8px;" placeholder="Leave empty to use mock data">
+            <div style="font-size:0.9em;color:#888;margin-top:8px;">Get a free API key from <a href="https://openweathermap.org/api" target="_blank" style="color:#1E90FF;">openweathermap.org</a>. Leave empty to use mock weather data.</div>
 
             <div id="calendar-color-mapping-section" style="margin-top:24px;">
                 <label style="margin-bottom:8px;">Calendar Color Mapping:</label>
@@ -210,6 +222,8 @@
                 color_event_text: document.getElementById('color_event_text').checked,
                 calendar_ids: document.getElementById('calendar_ids').value.trim(),
                 calendar_colors: document.getElementById('calendar_colors').value,
+                weather_location: document.getElementById('weather_location').value.trim(),
+                weather_api_key: document.getElementById('weather_api_key').value.trim(),
                 // Font weight settings (only for grid view)
                 font_weight_weekday: parseInt(document.getElementById('font_weight_weekday').value) || 600,
                 font_weight_day_number: parseInt(document.getElementById('font_weight_day_number').value) || 600,

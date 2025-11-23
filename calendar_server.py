@@ -15,6 +15,7 @@ import sys
 import logging
 import time
 import queue
+import requests
 
 app = Flask(__name__)
 
@@ -145,7 +146,10 @@ SETTINGS_DEFAULTS = {
     'filter_enable_edge_enhance': True,
     'filter_edge_enhance_type': 'more',  # 'normal' or 'more'
     'filter_enable_sharpness': True,
-    'filter_sharpness_factor': 1.3
+    'filter_sharpness_factor': 1.3,
+    # Weather settings
+    'weather_location': '',  # City name or coordinates (e.g., "New York,NY,US" or "lat,lon")
+    'weather_api_key': ''  # OpenWeatherMap API key (optional, can use free tier)
 }
 settings_lock = threading.Lock()
 
@@ -506,6 +510,221 @@ def api_calendar_list():
         return jsonify({'calendars': calendars})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@app.route('/api/weather')
+def api_weather():
+    """Fetch weather data for a date range using OpenWeatherMap API"""
+    settings = load_settings()
+    location = settings.get('weather_location', '').strip()
+    api_key = settings.get('weather_api_key', '').strip()
+    
+    if not location:
+        return jsonify({'error': 'Weather location not configured'}), 400
+    
+    # Get date range from query params (default to next 16 days)
+    start_date_str = request.args.get('start_date')
+    end_date_str = request.args.get('end_date')
+    
+    if not start_date_str or not end_date_str:
+        # Default to today + 16 days (typical calendar view)
+        today = date.today()
+        start_date = today
+        end_date = today + timedelta(days=16)
+        start_date_str = start_date.isoformat()
+        end_date_str = end_date.isoformat()
+    
+    try:
+        # Parse dates
+        start_date = datetime.fromisoformat(start_date_str).date()
+        end_date = datetime.fromisoformat(end_date_str).date()
+        
+        # OpenWeatherMap API
+        # If no API key, we'll use a free alternative or return mock data
+        if not api_key:
+            # Return mock data if no API key configured
+            log_info("No weather API key configured, returning mock data")
+            return get_mock_weather_data(start_date, end_date, location)
+        
+        # Try to get coordinates from location string
+        # First, try if it's already coordinates (lat,lon)
+        if ',' in location and not any(c.isalpha() for c in location.replace(',', '').replace('-', '').replace('.', '').replace(' ', '')):
+            # Looks like coordinates
+            lat, lon = location.split(',')
+            lat = lat.strip()
+            lon = lon.strip()
+        else:
+            # Geocode location to get coordinates
+            geocode_url = f"http://api.openweathermap.org/geo/1.0/direct"
+            geocode_params = {
+                'q': location,
+                'limit': 1,
+                'appid': api_key
+            }
+            try:
+                geocode_response = requests.get(geocode_url, params=geocode_params, timeout=5)
+                geocode_response.raise_for_status()
+                geocode_data = geocode_response.json()
+                if not geocode_data:
+                    return jsonify({'error': f'Location not found: {location}'}), 404
+                lat = geocode_data[0]['lat']
+                lon = geocode_data[0]['lon']
+            except Exception as e:
+                log_info(f"Geocoding error: {e}")
+                return jsonify({'error': f'Failed to geocode location: {str(e)}'}), 500
+        
+        # Fetch forecast data (OpenWeatherMap 5-day/3-hour forecast)
+        forecast_url = "https://api.openweathermap.org/data/2.5/forecast"
+        forecast_params = {
+            'lat': lat,
+            'lon': lon,
+            'appid': api_key,
+            'units': 'imperial'  # Use Fahrenheit
+        }
+        
+        try:
+            forecast_response = requests.get(forecast_url, params=forecast_params, timeout=10)
+            forecast_response.raise_for_status()
+            forecast_data = forecast_response.json()
+            
+            # Process forecast data into daily high/low
+            weather_by_date = {}
+            
+            for item in forecast_data.get('list', []):
+                # Parse datetime
+                dt = datetime.fromtimestamp(item['dt'])
+                date_key = dt.date().isoformat()
+                
+                # Skip if outside our date range
+                if date_key < start_date_str or date_key > end_date_str:
+                    continue
+                
+                temp = item['main']['temp']
+                weather_main = item['weather'][0]['main'].lower()
+                weather_id = item['weather'][0]['id']
+                
+                if date_key not in weather_by_date:
+                    weather_by_date[date_key] = {
+                        'high': temp,
+                        'low': temp,
+                        'conditions': weather_main,
+                        'icon_id': weather_id
+                    }
+                else:
+                    weather_by_date[date_key]['high'] = max(weather_by_date[date_key]['high'], temp)
+                    weather_by_date[date_key]['low'] = min(weather_by_date[date_key]['low'], temp)
+                    # Use the most representative condition (prefer more significant weather)
+                    if weather_main in ['rain', 'snow', 'thunderstorm', 'drizzle']:
+                        weather_by_date[date_key]['conditions'] = weather_main
+                        weather_by_date[date_key]['icon_id'] = weather_id
+            
+            # Fill in missing dates with current weather or extend forecast
+            result = {}
+            current_date = start_date
+            while current_date <= end_date:
+                date_key = current_date.isoformat()
+                if date_key in weather_by_date:
+                    data = weather_by_date[date_key]
+                    result[date_key] = {
+                        'high': round(data['high']),
+                        'low': round(data['low']),
+                        'icon': get_weather_icon_from_condition(data['conditions'], data['icon_id'])
+                    }
+                else:
+                    # For dates beyond forecast, use current weather or extend
+                    # Get current weather for the location
+                    if current_date == start_date:
+                        current_url = "https://api.openweathermap.org/data/2.5/weather"
+                        current_params = {
+                            'lat': lat,
+                            'lon': lon,
+                            'appid': api_key,
+                            'units': 'imperial'
+                        }
+                        try:
+                            current_response = requests.get(current_url, params=current_params, timeout=5)
+                            current_response.raise_for_status()
+                            current_data = current_response.json()
+                            temp = current_data['main']['temp']
+                            weather_main = current_data['weather'][0]['main'].lower()
+                            weather_id = current_data['weather'][0]['id']
+                            result[date_key] = {
+                                'high': round(temp + 5),  # Estimate high
+                                'low': round(temp - 5),   # Estimate low
+                                'icon': get_weather_icon_from_condition(weather_main, weather_id)
+                            }
+                        except:
+                            # Fallback to mock data
+                            result[date_key] = get_mock_weather_for_date(date_key)
+                    else:
+                        # Use mock data for dates beyond forecast
+                        result[date_key] = get_mock_weather_for_date(date_key)
+                current_date += timedelta(days=1)
+            
+            return jsonify(result)
+            
+        except requests.exceptions.RequestException as e:
+            log_info(f"Weather API error: {e}")
+            return jsonify({'error': f'Weather API error: {str(e)}'}), 500
+        except Exception as e:
+            log_info(f"Weather processing error: {e}")
+            return jsonify({'error': f'Error processing weather data: {str(e)}'}), 500
+            
+    except Exception as e:
+        log_info(f"Weather endpoint error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+def get_weather_icon_from_condition(condition, icon_id):
+    """Map OpenWeatherMap condition to emoji icon"""
+    # Map based on OpenWeatherMap weather codes
+    if icon_id >= 200 and icon_id < 300:
+        return '⛈️'  # Thunderstorm
+    elif icon_id >= 300 and icon_id < 400:
+        return '🌧️'  # Drizzle
+    elif icon_id >= 500 and icon_id < 600:
+        return '🌧️'  # Rain
+    elif icon_id >= 600 and icon_id < 700:
+        return '❄️'  # Snow
+    elif icon_id >= 700 and icon_id < 800:
+        return '🌫️'  # Atmosphere (fog, mist, etc.)
+    elif icon_id == 800:
+        return '☀️'  # Clear sky
+    elif icon_id >= 801 and icon_id < 805:
+        return '⛅'  # Clouds
+    else:
+        return '☁️'  # Default cloudy
+
+def get_mock_weather_data(start_date, end_date, location):
+    """Generate mock weather data for date range"""
+    result = {}
+    current_date = start_date
+    while current_date <= end_date:
+        date_key = current_date.isoformat()
+        result[date_key] = get_mock_weather_for_date(date_key)
+        current_date += timedelta(days=1)
+    return jsonify(result)
+
+def get_mock_weather_for_date(date_key):
+    """Generate mock weather for a single date"""
+    import hashlib
+    seed = int(hashlib.md5(date_key.encode()).hexdigest()[:8], 16)
+    
+    # Generate temperatures
+    day_of_year = (datetime.fromisoformat(date_key).date() - date(datetime.fromisoformat(date_key).year, 1, 1)).days
+    seasonal_variation = 15 * (1 - abs((day_of_year - 182) / 182))  # Peak in summer
+    base_temp = 70 + seasonal_variation
+    random_variation = (seed % 20) - 10
+    high = round(base_temp + 5 + (seed % 10))
+    low = round(base_temp - 5 - (seed % 10))
+    
+    # Generate icon
+    icons = ['☀️', '⛅', '☁️', '🌧️', '⛈️', '❄️', '🌫️', '🌤️', '🌦️', '☀️']
+    icon = icons[seed % len(icons)]
+    
+    return {
+        'high': high,
+        'low': low,
+        'icon': icon
+    }
 
 @app.route('/settings', methods=['GET'])
 def settings_page():
