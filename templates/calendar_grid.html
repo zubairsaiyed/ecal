@@ -426,6 +426,96 @@
             return result;
         }
 
+        // Clear weather cache and refresh weather data
+        function clearWeatherCache() {
+            weatherCache = {};
+            weatherCacheDateRange = null;
+            console.log('Weather cache cleared');
+        }
+
+        // Refresh weather and re-render calendar
+        async function refreshWeatherAndRender() {
+            console.log('Refreshing weather data...');
+            clearWeatherCache();
+            
+            // Re-fetch events and re-render with fresh weather
+            try {
+                const eventsResponse = await fetch('/api/events');
+                const events = await eventsResponse.json();
+                setWeeksVariable();
+                renderWeekdays();
+                await renderCalendar(events);
+                setTimeout(() => {
+                    adjustRowHeights();
+                    setTimeout(signalRenderComplete, 50);
+                }, 100);
+                console.log('Weather refreshed and calendar re-rendered');
+            } catch (error) {
+                console.error('Error refreshing weather:', error);
+            }
+        }
+
+        // Schedule weather refresh at 12pm and 12am
+        function scheduleWeatherRefresh() {
+            function getNextRefreshTime() {
+                const now = new Date();
+                const currentHour = now.getHours();
+                const currentMinute = now.getMinutes();
+                const currentSecond = now.getSeconds();
+                
+                // Calculate milliseconds until next 12pm or 12am
+                let nextRefresh = new Date();
+                nextRefresh.setSeconds(0);
+                nextRefresh.setMilliseconds(0);
+                
+                if (currentHour < 12) {
+                    // Next refresh is at 12pm today
+                    nextRefresh.setHours(12);
+                    nextRefresh.setMinutes(0);
+                } else if (currentHour >= 12 && currentHour < 24) {
+                    // After 12pm, next refresh is at 12am tomorrow
+                    if (currentHour === 12 && currentMinute === 0 && currentSecond === 0) {
+                        // Exactly 12pm, refresh now and schedule next for 12am
+                        return { immediate: true, nextTime: null };
+                    } else {
+                        // After 12pm, next is 12am tomorrow
+                        nextRefresh.setDate(nextRefresh.getDate() + 1);
+                        nextRefresh.setHours(0);
+                        nextRefresh.setMinutes(0);
+                    }
+                }
+                
+                // If we're exactly at 12am, refresh now
+                if (currentHour === 0 && currentMinute === 0 && currentSecond === 0) {
+                    return { immediate: true, nextTime: nextRefresh };
+                }
+                
+                return { immediate: false, nextTime: nextRefresh };
+            }
+            
+            function scheduleNext() {
+                const { immediate, nextTime } = getNextRefreshTime();
+                
+                if (immediate) {
+                    refreshWeatherAndRender();
+                    // Schedule the next one (12 hours later)
+                    setTimeout(() => {
+                        scheduleNext();
+                    }, 12 * 60 * 60 * 1000); // 12 hours in milliseconds
+                } else if (nextTime) {
+                    const msUntilNext = nextTime.getTime() - Date.now();
+                    console.log(`Weather refresh scheduled for ${nextTime.toLocaleString()}`);
+                    setTimeout(() => {
+                        refreshWeatherAndRender();
+                        scheduleNext(); // Schedule the next refresh
+                    }, msUntilNext);
+                }
+            }
+            
+            // Start scheduling
+            scheduleNext();
+        }
+
         function getMockWeatherForDate(dateKey) {
             const seed = hashCode(dateKey);
             const dayOfYear = getDayOfYear(dateKey);
@@ -851,6 +941,9 @@
                     setTimeout(signalRenderComplete, 50);
                 }, 100);
             });
+        
+        // Schedule automatic weather refreshes at 12pm and 12am
+        scheduleWeatherRefresh();
     </script>
 </body>
 </html>
