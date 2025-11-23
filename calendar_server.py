@@ -700,11 +700,26 @@ def api_weather():
             result = {}
             for i, date_str in enumerate(dates):
                 if i < len(temps_max) and i < len(temps_min) and i < len(weather_codes):
-                    result[date_str] = {
-                        'high': round(temps_max[i]),
-                        'low': round(temps_min[i]),
-                        'icon': get_weather_icon_from_wmo_code(weather_codes[i])
-                    }
+                    # Handle None/null values in temperature data
+                    temp_max = temps_max[i]
+                    temp_min = temps_min[i]
+                    weather_code = weather_codes[i]
+                    
+                    # Skip if temperatures are None/null
+                    if temp_max is None or temp_min is None:
+                        log_info(f"Skipping date {date_str} - missing temperature data (high: {temp_max}, low: {temp_min})")
+                        result[date_str] = None  # Will display as dashes
+                        continue
+                    
+                    try:
+                        result[date_str] = {
+                            'high': round(float(temp_max)),
+                            'low': round(float(temp_min)),
+                            'icon': get_weather_icon_from_wmo_code(weather_code) if weather_code is not None else '☁️'
+                        }
+                    except (ValueError, TypeError) as e:
+                        log_info(f"Error processing temperature data for {date_str}: {e} (high: {temp_max}, low: {temp_min})")
+                        result[date_str] = None  # Will display as dashes
             
             # Fill in any missing dates in the range with null values (will display as dashes)
             current_date = start_date
