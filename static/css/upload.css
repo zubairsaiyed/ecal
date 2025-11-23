@@ -78,6 +78,31 @@ body {
     background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
 }
 
+.mode-select {
+    padding: 8px 12px;
+    border: 2px solid #4facfe;
+    border-radius: 20px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-weight: 600;
+    background: white;
+    color: #4facfe;
+    font-family: inherit;
+    margin-right: 10px;
+    min-width: 160px;
+}
+
+.mode-select:hover {
+    background: #f0f8ff;
+    border-color: #00b894;
+}
+
+.mode-select:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(79, 172, 254, 0.2);
+}
+
 .mode-switch-btn {
     background: white;
     color: #4facfe;
@@ -99,6 +124,12 @@ body {
 
 .mode-switch-btn:active {
     transform: translateY(0);
+}
+
+.mode-switch-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
 }
 
 .content {

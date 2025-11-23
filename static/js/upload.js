@@ -166,31 +166,46 @@ async function triggerManualSync() {
 // Update mode UI
 function updateModeUI(mode) {
     const modeBadge = document.getElementById('currentMode');
+    const modeSelect = document.getElementById('modeSelect');
     const switchBtn = document.getElementById('modeSwitchBtn');
     
     modeBadge.classList.remove('calendar', 'album');
     
     if (mode === 'image_receiver') {
         modeBadge.textContent = '📸 Image Receiver';
-        switchBtn.textContent = '🔄 Switch Mode';
+        if (modeSelect) {
+            modeSelect.value = 'image_receiver';
+            // Update switch button text based on selected mode
+            updateSwitchButtonText();
+        }
     } else if (mode === 'calendar_sync') {
         modeBadge.textContent = '📅 Calendar Sync';
         modeBadge.classList.add('calendar');
-        switchBtn.textContent = '🔄 Switch Mode';
+        if (modeSelect) {
+            modeSelect.value = 'calendar_sync';
+            updateSwitchButtonText();
+        }
     } else if (mode === 'album_sync') {
         modeBadge.textContent = '📷 Album Sync';
         modeBadge.classList.add('album');
-        switchBtn.textContent = '🔄 Switch Mode';
+        if (modeSelect) {
+            modeSelect.value = 'album_sync';
+            updateSwitchButtonText();
+        }
     }
 }
 
-// Switch mode
-async function switchMode() {
-    const modeBadge = document.getElementById('currentMode');
+// Update switch button text to show target mode
+function updateSwitchButtonText() {
+    const modeSelect = document.getElementById('modeSelect');
     const switchBtn = document.getElementById('modeSwitchBtn');
-    const status = document.getElementById('status');
+    const modeBadge = document.getElementById('currentMode');
     
-    // Determine current and target mode
+    if (!modeSelect || !switchBtn || !modeBadge) return;
+    
+    const selectedMode = modeSelect.value;
+    
+    // Determine current mode from badge
     let currentMode = 'image_receiver';
     if (modeBadge.textContent.includes('Calendar')) {
         currentMode = 'calendar_sync';
@@ -198,18 +213,66 @@ async function switchMode() {
         currentMode = 'album_sync';
     }
     
-    // Cycle through modes: image_receiver -> calendar_sync -> album_sync -> image_receiver
-    let targetMode;
-    let targetModeName;
-    if (currentMode === 'image_receiver') {
-        targetMode = 'calendar_sync';
-        targetModeName = 'Calendar Sync';
-    } else if (currentMode === 'calendar_sync') {
-        targetMode = 'album_sync';
-        targetModeName = 'Album Sync';
+    // If already in selected mode, show "Already Selected"
+    if (currentMode === selectedMode) {
+        switchBtn.textContent = '✓ Already Selected';
+        switchBtn.disabled = true;
     } else {
-        targetMode = 'image_receiver';
+        // Show which mode will be switched to
+        let targetModeName;
+        if (selectedMode === 'image_receiver') {
+            targetModeName = 'Image Receiver';
+        } else if (selectedMode === 'calendar_sync') {
+            targetModeName = 'Calendar Sync';
+        } else {
+            targetModeName = 'Album Sync';
+        }
+        switchBtn.textContent = `🔄 Switch to ${targetModeName}`;
+        switchBtn.disabled = false;
+    }
+}
+
+// Switch mode
+async function switchMode() {
+    const modeSelect = document.getElementById('modeSelect');
+    const switchBtn = document.getElementById('modeSwitchBtn');
+    const status = document.getElementById('status');
+    
+    // Get selected mode from dropdown
+    if (!modeSelect) {
+        status.textContent = '❌ Mode selector not found';
+        status.className = 'status error';
+        status.style.display = 'block';
+        return;
+    }
+    
+    const targetMode = modeSelect.value;
+    
+    // Determine current mode from badge
+    const modeBadge = document.getElementById('currentMode');
+    let currentMode = 'image_receiver';
+    if (modeBadge.textContent.includes('Calendar')) {
+        currentMode = 'calendar_sync';
+    } else if (modeBadge.textContent.includes('Album')) {
+        currentMode = 'album_sync';
+    }
+    
+    // Check if already in target mode
+    if (currentMode === targetMode) {
+        status.textContent = `✅ Already in ${targetMode === 'image_receiver' ? 'Image Receiver' : targetMode === 'calendar_sync' ? 'Calendar Sync' : 'Album Sync'} mode`;
+        status.className = 'status success';
+        status.style.display = 'block';
+        return;
+    }
+    
+    // Get friendly name for confirmation
+    let targetModeName;
+    if (targetMode === 'image_receiver') {
         targetModeName = 'Image Receiver';
+    } else if (targetMode === 'calendar_sync') {
+        targetModeName = 'Calendar Sync';
+    } else {
+        targetModeName = 'Album Sync';
     }
     
     // Confirm with user
@@ -290,6 +353,7 @@ async function switchMode() {
         status.style.display = 'block';
     } finally {
         switchBtn.disabled = false;
+        updateSwitchButtonText(); // Update button text after mode switch
         loadCurrentMode();  // Reload to confirm
     }
 }
@@ -579,6 +643,14 @@ document.addEventListener('DOMContentLoaded', function() {
     if (modeSwitchBtn) {
         modeSwitchBtn.addEventListener('click', switchMode);
         console.log('Mode switch button listener attached');
+    }
+    
+    // Mode selector change event to update button text
+    const modeSelect = document.getElementById('modeSelect');
+    if (modeSelect) {
+        modeSelect.addEventListener('change', updateSwitchButtonText);
+        // Initialize button text
+        updateSwitchButtonText();
     }
     
     // Calendar sync trigger button
