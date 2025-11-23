@@ -86,6 +86,18 @@ _calendar_sync_status = {
 }
 _manual_sync_trigger = False  # Flag to trigger manual sync
 
+# Global album sync process and status
+_album_sync_process = None
+_album_sync_lock = threading.Lock()
+_album_sync_status = {
+    'active': False,
+    'last_fetch_time': None,
+    'last_upload_time': None,
+    'last_error': None,
+    'fetching': False,
+    'uploading': False
+}
+
 # Helper function to log to stderr (which Flask shows) for important messages
 def log_info(message):
     """Log to stderr (which Flask shows in logs) and log buffer"""
@@ -98,6 +110,7 @@ IMAGE_SCRIPT = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'displa
 CONFIG_FILE = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'config.json')
 SERVICE_MANAGER = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'service_manager.py')
 CALENDAR_SYNC_SCRIPT = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'calendar_sync_service.py')
+ALBUM_SYNC_SCRIPT = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'album_sync_service.py')
 
 # Memory optimization settings
 MAX_IMAGE_DIMENSION = 2000  # Maximum dimension for large images
@@ -114,6 +127,13 @@ def load_config():
         'mode': 'image_receiver',
         'calendar_sync': {
             'calendar_url': 'http://localhost:5000'
+        },
+        'album_sync': {
+            'album_url': '',
+            'album_token': '',
+            'poll_interval': 300,
+            'display_duration': 30,
+            'shuffle': False
         },
         'image_receiver': {
             'host': '0.0.0.0',
@@ -256,6 +276,140 @@ def update_calendar_sync_status(fetching=False, uploading=False, error=None):
                 _calendar_sync_status['last_error'] = None
                 _calendar_sync_status['last_error_time'] = None
 
+def start_album_sync_process():
+    """Start album sync service as a background process"""
+    global _album_sync_process
+    
+    with _album_sync_lock:
+        if _album_sync_process and _album_sync_process.poll() is None:
+            log_info(f"[{datetime.now()}] Album sync process already running (PID: {_album_sync_process.pid})")
+            return True
+        
+        config = load_config()
+        album_config = config.get('album_sync', {})
+        receiver_config = config.get('image_receiver', {})
+        
+        # Determine endpoint URL from image_receiver config
+        receiver_host = receiver_config.get('host', '0.0.0.0')
+        receiver_port = receiver_config.get('port', 8000)
+        
+        if receiver_host == '0.0.0.0':
+            endpoint_host = 'localhost'
+        else:
+            endpoint_host = receiver_host
+        
+        endpoint_url = f"http://{endpoint_host}:{receiver_port}/upload"
+        
+        album_url = album_config.get('album_url', '')
+        if not album_url:
+            log_info(f"[{datetime.now()}] ERROR: Album URL not configured")
+            _album_sync_status['active'] = False
+            _album_sync_status['last_error'] = 'Album URL not configured'
+            return False
+        
+        album_token = album_config.get('album_token', '')
+        poll_interval = album_config.get('poll_interval', 300)
+        display_duration = album_config.get('display_duration', 30)
+        shuffle = album_config.get('shuffle', False)
+        
+        cmd = [sys.executable, ALBUM_SYNC_SCRIPT]
+        cmd.extend(['--album-url', album_url])
+        if album_token:
+            cmd.extend(['--album-token', album_token])
+        cmd.extend(['--endpoint-url', endpoint_url])
+        cmd.extend(['--poll-interval', str(poll_interval)])
+        cmd.extend(['--display-duration', str(display_duration)])
+        if shuffle:
+            cmd.append('--shuffle')
+        
+        log_info(f"[{datetime.now()}] Starting album sync process: {' '.join(cmd)}")
+        
+        try:
+            _album_sync_process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                preexec_fn=os.setsid  # Create new process group
+            )
+            log_info(f"[{datetime.now()}] Album sync process started (PID: {_album_sync_process.pid})")
+            _album_sync_status['active'] = True
+            _album_sync_status['process_pid'] = _album_sync_process.pid
+            return True
+        except Exception as e:
+            log_info(f"[{datetime.now()}] Error starting album sync process: {e}")
+            _album_sync_status['active'] = False
+            _album_sync_status['last_error'] = str(e)
+            return False
+
+def stop_album_sync_process():
+    """Stop album sync service process"""
+    global _album_sync_process, _album_sync_status
+    
+    with _album_sync_lock:
+        if not _album_sync_process:
+            _album_sync_status['active'] = False
+            return True
+        
+        if _album_sync_process.poll() is not None:
+            _album_sync_process = None
+            _album_sync_status['active'] = False
+            return True
+        
+        log_info(f"[{datetime.now()}] Stopping album sync process (PID: {_album_sync_process.pid})...")
+        
+        try:
+            # Kill the entire process group to ensure child processes are also terminated
+            import os
+            try:
+                os.killpg(os.getpgid(_album_sync_process.pid), signal.SIGTERM)
+                log_info(f"[{datetime.now()}] Sent SIGTERM to process group {os.getpgid(_album_sync_process.pid)}")
+            except (ProcessLookupError, PermissionError):
+                # Process group doesn't exist or permission denied, try direct termination
+                _album_sync_process.terminate()
+            
+            # Wait up to 5 seconds for termination
+            try:
+                _album_sync_process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                log_info(f"[{datetime.now()}] Process didn't terminate, forcing kill...")
+                try:
+                    os.killpg(os.getpgid(_album_sync_process.pid), signal.SIGKILL)
+                except (ProcessLookupError, PermissionError):
+                    _album_sync_process.kill()
+                _album_sync_process.wait()
+            
+            log_info(f"[{datetime.now()}] Album sync process stopped")
+            _album_sync_process = None
+            _album_sync_status['active'] = False
+            _album_sync_status['fetching'] = False
+            _album_sync_status['uploading'] = False
+            return True
+        except Exception as e:
+            log_info(f"[{datetime.now()}] Error stopping album sync process: {e}")
+            _album_sync_process = None
+            _album_sync_status['active'] = False
+            return False
+
+def update_album_sync_status(fetching=False, uploading=False, error=None):
+    """Update album sync status"""
+    global _album_sync_status
+    with _album_sync_lock:
+        if fetching is not None:
+            _album_sync_status['fetching'] = fetching
+            if fetching:
+                _album_sync_status['last_fetch_time'] = datetime.now().isoformat()
+        if uploading is not None:
+            _album_sync_status['uploading'] = uploading
+            if uploading:
+                _album_sync_status['last_upload_time'] = datetime.now().isoformat()
+        if error is not None:
+            _album_sync_status['last_error'] = error
+            if error:
+                _album_sync_status['last_error_time'] = datetime.now().isoformat()
+            else:
+                _album_sync_status['last_error'] = None
+                _album_sync_status['last_error_time'] = None
+
 def optimize_image_memory(img):
     """Optimize image for memory usage"""
     if not ENABLE_MEMORY_OPTIMIZATION:
@@ -287,13 +441,18 @@ def upload_image():
     
     log_info(f"[{datetime.now()}] Upload request received. Current mode: {current_mode}")
     
-    # Check if this upload is from the calendar sync service itself (should not trigger mode switch)
-    is_sync_upload = request.headers.get('X-Calendar-Sync-Upload') == 'true'
-    if is_sync_upload:
-        log_info(f"[{datetime.now()}] Calendar sync upload detected - skipping mode switch")
+    # Check if this upload is from a sync service (should not trigger mode switch)
+    is_calendar_sync_upload = request.headers.get('X-Calendar-Sync-Upload') == 'true'
+    is_album_sync_upload = request.headers.get('X-Album-Sync-Upload') == 'true'
+    is_sync_upload = is_calendar_sync_upload or is_album_sync_upload
     
-    if current_mode == 'calendar_sync' and not is_sync_upload:
-        log_info(f"[{datetime.now()}] ===== MODE SWITCH: Upload detected while in calendar_sync mode ======")
+    if is_calendar_sync_upload:
+        log_info(f"[{datetime.now()}] Calendar sync upload detected - skipping mode switch")
+    if is_album_sync_upload:
+        log_info(f"[{datetime.now()}] Album sync upload detected - skipping mode switch")
+    
+    if current_mode in ['calendar_sync', 'album_sync'] and not is_sync_upload:
+        log_info(f"[{datetime.now()}] ===== MODE SWITCH: Upload detected while in {current_mode} mode ======")
         log_info(f"[{datetime.now()}] Switching to image_receiver mode...")
         try:
             # Switch to image_receiver mode using service manager
@@ -314,7 +473,7 @@ def upload_image():
                 # Verify the mode was actually changed
                 new_config = load_config()
                 new_mode = new_config.get('mode', 'unknown')
-                log_info(f"[{datetime.now()}] Mode changed from calendar_sync to {new_mode}")
+                log_info(f"[{datetime.now()}] Mode changed from {current_mode} to {new_mode}")
                 
                 if new_mode == 'image_receiver':
                     mode_switched = True
@@ -540,8 +699,8 @@ def mode():
             data = request.get_json()
             new_mode = data.get('mode')
             
-            if new_mode not in ['image_receiver', 'calendar_sync']:
-                return jsonify({'error': 'Invalid mode. Must be image_receiver or calendar_sync'}), 400
+            if new_mode not in ['image_receiver', 'calendar_sync', 'album_sync']:
+                return jsonify({'error': 'Invalid mode. Must be image_receiver, calendar_sync, or album_sync'}), 400
             
             config = load_config()
             config['mode'] = new_mode
@@ -560,7 +719,7 @@ def mode():
     config = load_config()
     return jsonify({
         'mode': config.get('mode', 'image_receiver'),
-        'available_modes': ['image_receiver', 'calendar_sync']
+        'available_modes': ['image_receiver', 'calendar_sync', 'album_sync']
     })
 
 @app.route('/mode/switch', methods=['POST'])
@@ -578,9 +737,9 @@ def switch_mode():
         log_info(f"[{datetime.now()}] Current mode: {current_mode}")
         log_info(f"[{datetime.now()}] Requested mode: {new_mode}")
         
-        if new_mode not in ['image_receiver', 'calendar_sync']:
+        if new_mode not in ['image_receiver', 'calendar_sync', 'album_sync']:
             log_info(f"[{datetime.now()}] ERROR: Invalid mode requested")
-            return jsonify({'error': 'Invalid mode. Must be image_receiver or calendar_sync'}), 400
+            return jsonify({'error': 'Invalid mode. Must be image_receiver, calendar_sync, or album_sync'}), 400
         
         if current_mode == new_mode:
             log_info(f"[{datetime.now()}] Already in {new_mode} mode, no switch needed")
@@ -595,10 +754,12 @@ def switch_mode():
         save_config(config)
         log_info(f"[{datetime.now()}] Config updated to {new_mode} mode")
         
-        # Control calendar sync process based on mode
+        # Stop all sync processes first
+        stop_calendar_sync_process()
+        stop_album_sync_process()
+        
+        # Control sync processes based on mode
         if new_mode == 'calendar_sync':
-            # Stop calendar sync if running (shouldn't be, but just in case)
-            stop_calendar_sync_process()
             # Start calendar sync process
             if start_calendar_sync_process():
                 log_info(f"[{datetime.now()}] ===== MODE SWITCH SUCCESSFUL: {current_mode} -> {new_mode} =====")
@@ -614,24 +775,31 @@ def switch_mode():
                     'error': 'Failed to start calendar sync process',
                     'details': 'Check logs for details'
                 }), 500
-        else:  # image_receiver mode
-            # Stop calendar sync process if running
-            if stop_calendar_sync_process():
+        elif new_mode == 'album_sync':
+            # Start album sync process
+            if start_album_sync_process():
                 log_info(f"[{datetime.now()}] ===== MODE SWITCH SUCCESSFUL: {current_mode} -> {new_mode} =====")
-                log_info(f"[{datetime.now()}] Calendar sync process stopped")
+                log_info(f"[{datetime.now()}] Album sync process started - will fetch images shortly")
                 return jsonify({
                     'status': 'success',
-                    'message': f'Switched to {new_mode} mode. Calendar sync stopped.',
+                    'message': f'Switched to {new_mode} mode. Album sync started.',
                     'mode': new_mode
                 })
             else:
-                # Still succeeded even if stop failed (maybe it wasn't running)
-                log_info(f"[{datetime.now()}] ===== MODE SWITCH SUCCESSFUL: {current_mode} -> {new_mode} =====")
+                log_info(f"[{datetime.now()}] ===== MODE SWITCH FAILED: Could not start album sync =====")
                 return jsonify({
-                    'status': 'success',
-                    'message': f'Switched to {new_mode} mode',
-                    'mode': new_mode
-                })
+                    'error': 'Failed to start album sync process',
+                    'details': 'Check logs for details. Make sure album_url is configured.'
+                }), 500
+        else:  # image_receiver mode
+            # All sync processes already stopped above
+            log_info(f"[{datetime.now()}] ===== MODE SWITCH SUCCESSFUL: {current_mode} -> {new_mode} =====")
+            log_info(f"[{datetime.now()}] All sync processes stopped")
+            return jsonify({
+                'status': 'success',
+                'message': f'Switched to {new_mode} mode. All sync processes stopped.',
+                'mode': new_mode
+            })
         
     except Exception as e:
         log_info(f"[{datetime.now()}] ===== MODE SWITCH EXCEPTION ======")
@@ -723,6 +891,55 @@ def check_manual_sync_trigger():
         else:
             return jsonify({'trigger': False})
 
+@app.route('/album_sync/status', methods=['GET', 'POST'])
+def album_sync_status():
+    """Get or update album sync status"""
+    if request.method == 'POST':
+        # Album sync service updates its status here
+        try:
+            data = request.get_json()
+            
+            with _album_sync_lock:
+                if 'fetching' in data:
+                    _album_sync_status['fetching'] = bool(data['fetching'])
+                    if data['fetching']:
+                        _album_sync_status['last_fetch_time'] = datetime.now().isoformat()
+                
+                if 'uploading' in data:
+                    _album_sync_status['uploading'] = bool(data['uploading'])
+                    if data['uploading']:
+                        _album_sync_status['last_upload_time'] = datetime.now().isoformat()
+                
+                if 'error' in data:
+                    error = data['error']
+                    _album_sync_status['last_error'] = error if error else None
+                    if error:
+                        _album_sync_status['last_error_time'] = datetime.now().isoformat()
+                    else:
+                        _album_sync_status['last_error_time'] = None
+            
+            return jsonify({'status': 'success'})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 400
+    
+    # GET request - return current status
+    with _album_sync_lock:
+        status = _album_sync_status.copy()
+        
+        # Check if process is actually running
+        if _album_sync_process:
+            if _album_sync_process.poll() is None:
+                status['active'] = True
+                status['process_pid'] = _album_sync_process.pid
+            else:
+                status['active'] = False
+                status['process_pid'] = None
+        else:
+            status['active'] = False
+            status['process_pid'] = None
+        
+        return jsonify(status)
+
 @app.route('/logs')
 def get_logs():
     """Get recent logs as JSON"""
@@ -783,6 +1000,17 @@ def mode_config():
             if mode_type == 'calendar_sync':
                 if 'calendar_url' in data:
                     config['calendar_sync']['calendar_url'] = data['calendar_url']
+            elif mode_type == 'album_sync':
+                if 'album_url' in data:
+                    config['album_sync']['album_url'] = data['album_url']
+                if 'album_token' in data:
+                    config['album_sync']['album_token'] = data['album_token']
+                if 'poll_interval' in data:
+                    config['album_sync']['poll_interval'] = int(data['poll_interval'])
+                if 'display_duration' in data:
+                    config['album_sync']['display_duration'] = int(data['display_duration'])
+                if 'shuffle' in data:
+                    config['album_sync']['shuffle'] = bool(data['shuffle'])
             elif mode_type == 'image_receiver':
                 if 'host' in data:
                     config['image_receiver']['host'] = data['host']
@@ -804,8 +1032,9 @@ def mode_config():
 
 def cleanup_on_exit():
     """Cleanup function called on exit to ensure subprocesses are terminated"""
-    log_info(f"[{datetime.now()}] Cleanup on exit: stopping calendar sync process...")
+    log_info(f"[{datetime.now()}] Cleanup on exit: stopping sync processes...")
     stop_calendar_sync_process()
+    stop_album_sync_process()
 
 def signal_handler(signum, frame):
     """Handle termination signals to ensure clean shutdown"""
@@ -830,6 +1059,15 @@ if __name__ == '__main__':
             time.sleep(2)  # Give Flask time to start
             log_info(f"[{datetime.now()}] Auto-starting calendar sync process (mode is calendar_sync)...")
             start_calendar_sync_process()
+        
+        thread = threading.Thread(target=start_sync_delayed, daemon=True)
+        thread.start()
+    elif current_mode == 'album_sync':
+        # Wait a moment for Flask to start, then start album sync process
+        def start_sync_delayed():
+            time.sleep(2)  # Give Flask time to start
+            log_info(f"[{datetime.now()}] Auto-starting album sync process (mode is album_sync)...")
+            start_album_sync_process()
         
         thread = threading.Thread(target=start_sync_delayed, daemon=True)
         thread.start()

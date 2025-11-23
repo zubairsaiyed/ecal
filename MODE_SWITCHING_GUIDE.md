@@ -2,10 +2,11 @@
 
 ## Overview
 
-Your ECAL e-paper display now supports **two operating modes**:
+Your ECAL e-paper display now supports **three operating modes**:
 
 1. **📸 Image Receiver Mode** - Accept manual image uploads via web interface
 2. **📅 Calendar Sync Mode** - Automatically sync and display calendar screenshots
+3. **📷 Album Sync Mode** - Automatically display images from iPhone shared albums
 
 You can easily switch between these modes using either the command line or the web interface.
 
@@ -58,6 +59,8 @@ python3 service_manager.py stop
 python3 service_manager.py set-mode image_receiver
 # or
 python3 service_manager.py set-mode calendar_sync
+# or
+python3 service_manager.py set-mode album_sync
 ```
 
 #### Switch mode and restart service:
@@ -65,6 +68,8 @@ python3 service_manager.py set-mode calendar_sync
 python3 service_manager.py switch calendar_sync
 # or
 python3 service_manager.py switch image_receiver
+# or
+python3 service_manager.py switch album_sync
 ```
 
 ### Method 2: Web Interface
@@ -149,6 +154,57 @@ python3 service_manager.py switch image_receiver
 
 ---
 
+### 📷 Album Sync Mode
+
+**Purpose:** Automatically display images from iPhone shared albums
+
+**Features:**
+- Fetches images from iCloud shared album RSS feeds
+- Supports both public and private albums
+- Automatic image rotation and display
+- Configurable display duration per image
+- Optional shuffle mode for random image order
+- Periodic polling for new images
+- Uses existing image receiving capabilities for processing
+
+**Configuration** (`config.json`):
+```json
+{
+  "mode": "album_sync",
+  "album_sync": {
+    "album_url": "https://www.icloud.com/sharedalbum/#...",
+    "album_token": "optional_token_for_private_albums",
+    "poll_interval": 300,
+    "display_duration": 30,
+    "shuffle": false
+  }
+}
+```
+
+**Configuration Options:**
+- `album_url`: iCloud shared album URL or RSS feed URL (required)
+- `album_token`: Optional token for private albums
+- `poll_interval`: How often to check for new images (in seconds, default: 300)
+- `display_duration`: How long to display each image (in seconds, default: 30)
+- `shuffle`: Whether to shuffle images or display sequentially (default: false)
+
+**Setting up an iPhone Shared Album:**
+1. Open the Photos app on your iPhone
+2. Tap "Albums" at the bottom
+3. Tap the "+" icon and select "New Shared Album"
+4. Name the album and add photos
+5. Tap the "People" icon
+6. Toggle on "Public Website" to get a public URL
+7. Copy the URL and use it as `album_url` in the configuration
+
+**When to use:**
+- Digital photo frame functionality
+- Family photo sharing display
+- Automatic photo rotation
+- Hands-free photo viewing
+
+---
+
 ## Configuration File
 
 The configuration is stored in `config.json`:
@@ -158,6 +214,13 @@ The configuration is stored in `config.json`:
   "mode": "image_receiver",
   "calendar_sync": {
     "calendar_url": "http://localhost:5000"
+  },
+  "album_sync": {
+    "album_url": "",
+    "album_token": "",
+    "poll_interval": 300,
+    "display_duration": 30,
+    "shuffle": false
   },
   "image_receiver": {
     "host": "0.0.0.0",
@@ -185,6 +248,20 @@ curl -X POST http://localhost:8000/mode/config \
   }'
 ```
 
+**Update album sync settings:**
+```bash
+curl -X POST http://localhost:8000/mode/config \
+  -H "Content-Type: application/json" \
+  -d '{
+    "mode_type": "album_sync",
+    "album_url": "https://www.icloud.com/sharedalbum/#...",
+    "album_token": "optional_token",
+    "poll_interval": 300,
+    "display_duration": 30,
+    "shuffle": false
+  }'
+```
+
 ---
 
 ## API Endpoints
@@ -198,7 +275,7 @@ GET /mode
 ```json
 {
   "mode": "image_receiver",
-  "available_modes": ["image_receiver", "calendar_sync"]
+  "available_modes": ["image_receiver", "calendar_sync", "album_sync"]
 }
 ```
 

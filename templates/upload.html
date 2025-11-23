@@ -19,9 +19,11 @@
                 <span class="mode-label">Current Mode:</span>
                 <span class="mode-badge" id="currentMode">Image Receiver</span>
             </div>
-            <button type="button" class="mode-switch-btn" id="modeSwitchBtn">
-                🔄 Switch to Calendar Sync
-            </button>
+            <div class="mode-buttons">
+                <button type="button" class="mode-switch-btn" id="modeSwitchBtn">
+                    🔄 Switch Mode
+                </button>
+            </div>
         </div>
         
         <!-- Calendar Sync Status -->
@@ -38,6 +40,57 @@
                     <span id="syncStatusText">Checking status...</span>
                 </div>
                 <div class="status-details" id="syncStatusDetails"></div>
+            </div>
+        </div>
+        
+        <!-- Album Sync Status -->
+        <div class="album-sync-status" id="albumSyncStatus" style="display: none;">
+            <div class="status-header">
+                <span>📷 Album Sync Status</span>
+            </div>
+            <div class="status-content" id="albumSyncStatusContent">
+                <div class="status-item">
+                    <span class="status-indicator" id="albumSyncActiveIndicator">●</span>
+                    <span id="albumSyncStatusText">Checking status...</span>
+                </div>
+                <div class="status-details" id="albumSyncStatusDetails"></div>
+            </div>
+        </div>
+        
+        <!-- Album Sync Configuration -->
+        <div class="album-sync-config" id="albumSyncConfig" style="display: none;">
+            <div class="status-header">
+                <span>⚙️ Album Sync Configuration</span>
+            </div>
+            <div class="config-content">
+                <div class="config-item">
+                    <label for="albumUrl">Album URL:</label>
+                    <input type="text" id="albumUrl" placeholder="https://www.icloud.com/sharedalbum/#...">
+                    <div class="config-help">iCloud shared album URL or RSS feed URL</div>
+                </div>
+                <div class="config-item">
+                    <label for="albumToken">Album Token (optional):</label>
+                    <input type="text" id="albumToken" placeholder="For private albums">
+                    <div class="config-help">Token for private albums (if required)</div>
+                </div>
+                <div class="config-item">
+                    <label for="pollInterval">Poll Interval (seconds):</label>
+                    <input type="number" id="pollInterval" value="300" min="60">
+                    <div class="config-help">How often to check for new images</div>
+                </div>
+                <div class="config-item">
+                    <label for="displayDuration">Display Duration (seconds):</label>
+                    <input type="number" id="displayDuration" value="30" min="5">
+                    <div class="config-help">How long to display each image</div>
+                </div>
+                <div class="config-item">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="shuffleImages">
+                        <span class="checkmark"></span>
+                        <span class="label-text">Shuffle images</span>
+                    </label>
+                </div>
+                <button type="button" class="save-config-btn" id="saveAlbumConfigBtn">💾 Save Configuration</button>
             </div>
         </div>
         

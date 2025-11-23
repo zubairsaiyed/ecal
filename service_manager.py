@@ -33,8 +33,8 @@ def get_current_mode():
 
 def set_mode(mode):
     """Set the operating mode"""
-    if mode not in ['image_receiver', 'calendar_sync']:
-        print(f"Error: Invalid mode '{mode}'. Must be 'image_receiver' or 'calendar_sync'")
+    if mode not in ['image_receiver', 'calendar_sync', 'album_sync']:
+        print(f"Error: Invalid mode '{mode}'. Must be 'image_receiver', 'calendar_sync', or 'album_sync'")
         sys.exit(1)
     
     config = load_config()
@@ -108,6 +108,12 @@ def status():
         sync_config = config.get('calendar_sync', {})
         print(f"  Calendar URL: {sync_config.get('calendar_url', 'http://localhost:5000')}")
         print(f"  Poll Interval: 5 seconds (fixed)")
+    elif mode == 'album_sync':
+        album_config = config.get('album_sync', {})
+        print(f"  Album URL: {album_config.get('album_url', 'Not configured')}")
+        print(f"  Poll Interval: {album_config.get('poll_interval', 300)} seconds")
+        print(f"  Display Duration: {album_config.get('display_duration', 30)} seconds")
+        print(f"  Shuffle: {album_config.get('shuffle', False)}")
 
 def main():
     import argparse
@@ -129,12 +135,12 @@ def main():
     
     # Set mode command
     mode_parser = subparsers.add_parser('set-mode', help='Set the operating mode (no restart)')
-    mode_parser.add_argument('mode', choices=['image_receiver', 'calendar_sync'],
+    mode_parser.add_argument('mode', choices=['image_receiver', 'calendar_sync', 'album_sync'],
                             help='Mode to set')
     
     # Switch mode and restart
     switch_parser = subparsers.add_parser('switch', help='Switch mode and restart service')
-    switch_parser.add_argument('mode', choices=['image_receiver', 'calendar_sync'],
+    switch_parser.add_argument('mode', choices=['image_receiver', 'calendar_sync', 'album_sync'],
                                help='Mode to switch to')
     
     args = parser.parse_args()

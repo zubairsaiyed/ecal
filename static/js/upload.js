@@ -15,14 +15,30 @@ async function loadCurrentMode() {
         const data = await response.json();
         updateModeUI(data.mode);
         
-        // Show/hide calendar sync status based on mode
-        const statusDiv = document.getElementById('calendarSyncStatus');
+        // Show/hide sync status based on mode
+        const calendarStatusDiv = document.getElementById('calendarSyncStatus');
+        const albumStatusDiv = document.getElementById('albumSyncStatus');
+        const albumConfigDiv = document.getElementById('albumSyncConfig');
+        
         if (data.mode === 'calendar_sync') {
-            statusDiv.style.display = 'block';
+            calendarStatusDiv.style.display = 'block';
+            albumStatusDiv.style.display = 'none';
+            albumConfigDiv.style.display = 'none';
             startCalendarSyncStatusPolling();
-        } else {
-            statusDiv.style.display = 'none';
+            stopAlbumSyncStatusPolling();
+        } else if (data.mode === 'album_sync') {
+            calendarStatusDiv.style.display = 'none';
+            albumStatusDiv.style.display = 'block';
+            albumConfigDiv.style.display = 'block';
             stopCalendarSyncStatusPolling();
+            startAlbumSyncStatusPolling();
+            loadAlbumConfig();
+        } else {
+            calendarStatusDiv.style.display = 'none';
+            albumStatusDiv.style.display = 'none';
+            albumConfigDiv.style.display = 'none';
+            stopCalendarSyncStatusPolling();
+            stopAlbumSyncStatusPolling();
         }
     } catch (error) {
         console.error('Error loading mode:', error);
@@ -152,14 +168,19 @@ function updateModeUI(mode) {
     const modeBadge = document.getElementById('currentMode');
     const switchBtn = document.getElementById('modeSwitchBtn');
     
+    modeBadge.classList.remove('calendar', 'album');
+    
     if (mode === 'image_receiver') {
         modeBadge.textContent = '📸 Image Receiver';
-        modeBadge.classList.remove('calendar');
-        switchBtn.textContent = '🔄 Switch to Calendar Sync';
+        switchBtn.textContent = '🔄 Switch Mode';
     } else if (mode === 'calendar_sync') {
         modeBadge.textContent = '📅 Calendar Sync';
         modeBadge.classList.add('calendar');
-        switchBtn.textContent = '🔄 Switch to Image Receiver';
+        switchBtn.textContent = '🔄 Switch Mode';
+    } else if (mode === 'album_sync') {
+        modeBadge.textContent = '📷 Album Sync';
+        modeBadge.classList.add('album');
+        switchBtn.textContent = '🔄 Switch Mode';
     }
 }
 
@@ -169,12 +190,30 @@ async function switchMode() {
     const switchBtn = document.getElementById('modeSwitchBtn');
     const status = document.getElementById('status');
     
-    // Determine target mode
-    const currentMode = modeBadge.textContent.includes('Calendar') ? 'calendar_sync' : 'image_receiver';
-    const targetMode = currentMode === 'image_receiver' ? 'calendar_sync' : 'image_receiver';
+    // Determine current and target mode
+    let currentMode = 'image_receiver';
+    if (modeBadge.textContent.includes('Calendar')) {
+        currentMode = 'calendar_sync';
+    } else if (modeBadge.textContent.includes('Album')) {
+        currentMode = 'album_sync';
+    }
+    
+    // Cycle through modes: image_receiver -> calendar_sync -> album_sync -> image_receiver
+    let targetMode;
+    let targetModeName;
+    if (currentMode === 'image_receiver') {
+        targetMode = 'calendar_sync';
+        targetModeName = 'Calendar Sync';
+    } else if (currentMode === 'calendar_sync') {
+        targetMode = 'album_sync';
+        targetModeName = 'Album Sync';
+    } else {
+        targetMode = 'image_receiver';
+        targetModeName = 'Image Receiver';
+    }
     
     // Confirm with user
-    const confirmed = confirm(`Switch to ${targetMode === 'calendar_sync' ? 'Calendar Sync' : 'Image Receiver'} mode?\n\nNote: The service will restart and this page may become unavailable if switching to Calendar Sync mode.`);
+    const confirmed = confirm(`Switch to ${targetModeName} mode?`);
     
     if (!confirmed) return;
     
@@ -197,23 +236,47 @@ async function switchMode() {
             
             updateModeUI(targetMode);
             
-            // If switching to calendar sync, show a message and start polling status
+            // Show/hide appropriate status sections
+            const calendarStatusDiv = document.getElementById('calendarSyncStatus');
+            const albumStatusDiv = document.getElementById('albumSyncStatus');
+            const albumConfigDiv = document.getElementById('albumSyncConfig');
+            
             if (targetMode === 'calendar_sync') {
-                const statusDiv = document.getElementById('calendarSyncStatus');
-                if (statusDiv) {
-                    statusDiv.style.display = 'block';
+                if (calendarStatusDiv) {
+                    calendarStatusDiv.style.display = 'block';
                     startCalendarSyncStatusPolling();
                 }
+                if (albumStatusDiv) albumStatusDiv.style.display = 'none';
+                if (albumConfigDiv) albumConfigDiv.style.display = 'none';
+                stopAlbumSyncStatusPolling();
                 setTimeout(() => {
                     status.textContent = '📅 Now in Calendar Sync mode. Calendar sync status shown above.';
                 }, 2000);
+            } else if (targetMode === 'album_sync') {
+                if (calendarStatusDiv) calendarStatusDiv.style.display = 'none';
+                if (albumStatusDiv) {
+                    albumStatusDiv.style.display = 'block';
+                    startAlbumSyncStatusPolling();
+                }
+                if (albumConfigDiv) {
+                    albumConfigDiv.style.display = 'block';
+                    loadAlbumConfig();
+                }
+                stopCalendarSyncStatusPolling();
+                setTimeout(() => {
+                    status.textContent = '📷 Now in Album Sync mode. Configure your album settings above.';
+                }, 2000);
             } else {
-                // Switching to image receiver - hide calendar sync status
-                const statusDiv = document.getElementById('calendarSyncStatus');
-                if (statusDiv) {
-                    statusDiv.style.display = 'none';
+                // Switching to image receiver - hide all sync status
+                if (calendarStatusDiv) {
+                    calendarStatusDiv.style.display = 'none';
                     stopCalendarSyncStatusPolling();
                 }
+                if (albumStatusDiv) {
+                    albumStatusDiv.style.display = 'none';
+                    stopAlbumSyncStatusPolling();
+                }
+                if (albumConfigDiv) albumConfigDiv.style.display = 'none';
             }
         } else {
             status.textContent = `❌ Failed to switch mode: ${result.error}`;
@@ -228,6 +291,163 @@ async function switchMode() {
     } finally {
         switchBtn.disabled = false;
         loadCurrentMode();  // Reload to confirm
+    }
+}
+
+// Album sync status polling
+let albumSyncStatusInterval = null;
+
+async function updateAlbumSyncStatus() {
+    try {
+        const response = await fetch('/album_sync/status');
+        const status = await response.json();
+        
+        const statusDiv = document.getElementById('albumSyncStatus');
+        const indicator = document.getElementById('albumSyncActiveIndicator');
+        const statusText = document.getElementById('albumSyncStatusText');
+        const statusDetails = document.getElementById('albumSyncStatusDetails');
+        
+        if (!statusDiv || !indicator || !statusText || !statusDetails) return;
+        
+        if (!status.active) {
+            indicator.className = 'status-indicator inactive';
+            statusText.textContent = 'Album sync is not active';
+            statusDetails.textContent = '';
+            return;
+        }
+        
+        // Update indicator based on activity
+        if (status.fetching) {
+            indicator.className = 'status-indicator fetching';
+            statusText.textContent = '🔄 Fetching album images...';
+        } else if (status.uploading) {
+            indicator.className = 'status-indicator uploading';
+            statusText.textContent = '📤 Uploading to display...';
+        } else if (status.last_error) {
+            indicator.className = 'status-indicator error';
+            statusText.textContent = '❌ Error: ' + status.last_error;
+        } else {
+            indicator.className = 'status-indicator active';
+            statusText.textContent = '✅ Album sync active';
+        }
+        
+        // Update details
+        let details = [];
+        if (status.last_fetch_time) {
+            const fetchTime = new Date(status.last_fetch_time);
+            details.push(`Last fetch: ${fetchTime.toLocaleTimeString()}`);
+        }
+        if (status.last_upload_time) {
+            const uploadTime = new Date(status.last_upload_time);
+            details.push(`Last upload: ${uploadTime.toLocaleTimeString()}`);
+        }
+        if (status.process_pid) {
+            details.push(`PID: ${status.process_pid}`);
+        }
+        statusDetails.textContent = details.join(' • ');
+        
+    } catch (error) {
+        console.error('Error fetching album sync status:', error);
+    }
+}
+
+function startAlbumSyncStatusPolling() {
+    // Stop any existing polling
+    stopAlbumSyncStatusPolling();
+    
+    // Update immediately
+    updateAlbumSyncStatus();
+    
+    // Then poll every 1 second
+    albumSyncStatusInterval = setInterval(updateAlbumSyncStatus, 1000);
+}
+
+function stopAlbumSyncStatusPolling() {
+    if (albumSyncStatusInterval) {
+        clearInterval(albumSyncStatusInterval);
+        albumSyncStatusInterval = null;
+    }
+}
+
+// Load album configuration
+async function loadAlbumConfig() {
+    try {
+        const response = await fetch('/mode/config');
+        const config = await response.json();
+        
+        const albumConfig = config.album_sync || {};
+        
+        const albumUrlInput = document.getElementById('albumUrl');
+        const albumTokenInput = document.getElementById('albumToken');
+        const pollIntervalInput = document.getElementById('pollInterval');
+        const displayDurationInput = document.getElementById('displayDuration');
+        const shuffleCheckbox = document.getElementById('shuffleImages');
+        
+        if (albumUrlInput) albumUrlInput.value = albumConfig.album_url || '';
+        if (albumTokenInput) albumTokenInput.value = albumConfig.album_token || '';
+        if (pollIntervalInput) pollIntervalInput.value = albumConfig.poll_interval || 300;
+        if (displayDurationInput) displayDurationInput.value = albumConfig.display_duration || 30;
+        if (shuffleCheckbox) shuffleCheckbox.checked = albumConfig.shuffle || false;
+    } catch (error) {
+        console.error('Error loading album config:', error);
+    }
+}
+
+// Save album configuration
+async function saveAlbumConfig() {
+    const status = document.getElementById('status');
+    const saveBtn = document.getElementById('saveAlbumConfigBtn');
+    
+    if (!saveBtn) return;
+    
+    saveBtn.disabled = true;
+    saveBtn.textContent = '⏳ Saving...';
+    
+    try {
+        const albumUrl = document.getElementById('albumUrl').value.trim();
+        if (!albumUrl) {
+            status.textContent = '❌ Album URL is required';
+            status.className = 'status error';
+            status.style.display = 'block';
+            saveBtn.disabled = false;
+            saveBtn.textContent = '💾 Save Configuration';
+            return;
+        }
+        
+        const config = {
+            mode_type: 'album_sync',
+            album_url: albumUrl,
+            album_token: document.getElementById('albumToken').value.trim(),
+            poll_interval: parseInt(document.getElementById('pollInterval').value) || 300,
+            display_duration: parseInt(document.getElementById('displayDuration').value) || 30,
+            shuffle: document.getElementById('shuffleImages').checked
+        };
+        
+        const response = await fetch('/mode/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(config)
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            status.textContent = '✅ Configuration saved! Restart album sync mode to apply changes.';
+            status.className = 'status success';
+            status.style.display = 'block';
+        } else {
+            status.textContent = '❌ Failed to save configuration: ' + (result.error || 'Unknown error');
+            status.className = 'status error';
+            status.style.display = 'block';
+        }
+    } catch (error) {
+        console.error('Save config error:', error);
+        status.textContent = '❌ Error saving configuration: ' + error.message;
+        status.className = 'status error';
+        status.style.display = 'block';
+    } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = '💾 Save Configuration';
     }
 }
 
@@ -366,6 +586,13 @@ document.addEventListener('DOMContentLoaded', function() {
     if (triggerSyncBtn) {
         triggerSyncBtn.addEventListener('click', triggerManualSync);
         console.log('Trigger sync button listener attached');
+    }
+    
+    // Album sync save config button
+    const saveAlbumConfigBtn = document.getElementById('saveAlbumConfigBtn');
+    if (saveAlbumConfigBtn) {
+        saveAlbumConfigBtn.addEventListener('click', saveAlbumConfig);
+        console.log('Save album config button listener attached');
     }
 
     // File input wrapper click event
