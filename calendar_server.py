@@ -148,8 +148,7 @@ SETTINGS_DEFAULTS = {
     'filter_enable_sharpness': True,
     'filter_sharpness_factor': 1.3,
     # Weather settings
-    'weather_location': '',  # City name or coordinates (e.g., "New York,NY,US" or "lat,lon")
-    'weather_api_key': ''  # OpenWeatherMap API key (optional, can use free tier)
+    'weather_location': ''  # City name or coordinates (e.g., "New York,NY,US" or "40.7128,-74.0060")
 }
 settings_lock = threading.Lock()
 
@@ -513,10 +512,9 @@ def api_calendar_list():
 
 @app.route('/api/weather')
 def api_weather():
-    """Fetch weather data for a date range using OpenWeatherMap API"""
+    """Fetch weather data for a date range using Open-Meteo API (no API key required)"""
     settings = load_settings()
     location = settings.get('weather_location', '').strip()
-    api_key = settings.get('weather_api_key', '').strip()
     
     if not location:
         return jsonify({'error': 'Weather location not configured'}), 400
@@ -538,47 +536,48 @@ def api_weather():
         start_date = datetime.fromisoformat(start_date_str).date()
         end_date = datetime.fromisoformat(end_date_str).date()
         
-        # OpenWeatherMap API
-        # If no API key, we'll use a free alternative or return mock data
-        if not api_key:
-            # Return mock data if no API key configured
-            log_info("No weather API key configured, returning mock data")
-            return get_mock_weather_data(start_date, end_date, location)
-        
         # Try to get coordinates from location string
         # First, try if it's already coordinates (lat,lon)
         if ',' in location and not any(c.isalpha() for c in location.replace(',', '').replace('-', '').replace('.', '').replace(' ', '')):
             # Looks like coordinates
-            lat, lon = location.split(',')
-            lat = lat.strip()
-            lon = lon.strip()
+            try:
+                lat, lon = location.split(',')
+                lat = float(lat.strip())
+                lon = float(lon.strip())
+            except ValueError:
+                return jsonify({'error': 'Invalid coordinates format. Use "lat,lon" (e.g., "40.7128,-74.0060")'}), 400
         else:
-            # Geocode location to get coordinates
-            geocode_url = f"http://api.openweathermap.org/geo/1.0/direct"
+            # Geocode location to get coordinates using Open-Meteo geocoding API
+            geocode_url = "https://geocoding-api.open-meteo.com/v1/search"
             geocode_params = {
-                'q': location,
-                'limit': 1,
-                'appid': api_key
+                'name': location,
+                'count': 1,
+                'language': 'en',
+                'format': 'json'
             }
             try:
                 geocode_response = requests.get(geocode_url, params=geocode_params, timeout=5)
                 geocode_response.raise_for_status()
                 geocode_data = geocode_response.json()
-                if not geocode_data:
+                if not geocode_data.get('results') or len(geocode_data['results']) == 0:
                     return jsonify({'error': f'Location not found: {location}'}), 404
-                lat = geocode_data[0]['lat']
-                lon = geocode_data[0]['lon']
+                lat = geocode_data['results'][0]['latitude']
+                lon = geocode_data['results'][0]['longitude']
+                log_info(f"Geocoded '{location}' to coordinates: {lat}, {lon}")
             except Exception as e:
                 log_info(f"Geocoding error: {e}")
                 return jsonify({'error': f'Failed to geocode location: {str(e)}'}), 500
         
-        # Fetch forecast data (OpenWeatherMap 5-day/3-hour forecast)
-        forecast_url = "https://api.openweathermap.org/data/2.5/forecast"
+        # Fetch forecast data from Open-Meteo (16-day forecast available)
+        forecast_url = "https://api.open-meteo.com/v1/forecast"
         forecast_params = {
-            'lat': lat,
-            'lon': lon,
-            'appid': api_key,
-            'units': 'imperial'  # Use Fahrenheit
+            'latitude': lat,
+            'longitude': lon,
+            'daily': 'weather_code,temperature_2m_max,temperature_2m_min',
+            'temperature_unit': 'fahrenheit',
+            'timezone': 'auto',
+            'start_date': start_date_str,
+            'end_date': end_date_str
         }
         
         try:
@@ -586,110 +585,80 @@ def api_weather():
             forecast_response.raise_for_status()
             forecast_data = forecast_response.json()
             
-            # Process forecast data into daily high/low
-            weather_by_date = {}
+            if 'daily' not in forecast_data:
+                return jsonify({'error': 'Invalid response from weather API'}), 500
             
-            for item in forecast_data.get('list', []):
-                # Parse datetime
-                dt = datetime.fromtimestamp(item['dt'])
-                date_key = dt.date().isoformat()
-                
-                # Skip if outside our date range
-                if date_key < start_date_str or date_key > end_date_str:
-                    continue
-                
-                temp = item['main']['temp']
-                weather_main = item['weather'][0]['main'].lower()
-                weather_id = item['weather'][0]['id']
-                
-                if date_key not in weather_by_date:
-                    weather_by_date[date_key] = {
-                        'high': temp,
-                        'low': temp,
-                        'conditions': weather_main,
-                        'icon_id': weather_id
-                    }
-                else:
-                    weather_by_date[date_key]['high'] = max(weather_by_date[date_key]['high'], temp)
-                    weather_by_date[date_key]['low'] = min(weather_by_date[date_key]['low'], temp)
-                    # Use the most representative condition (prefer more significant weather)
-                    if weather_main in ['rain', 'snow', 'thunderstorm', 'drizzle']:
-                        weather_by_date[date_key]['conditions'] = weather_main
-                        weather_by_date[date_key]['icon_id'] = weather_id
+            daily_data = forecast_data['daily']
+            dates = daily_data.get('time', [])
+            temps_max = daily_data.get('temperature_2m_max', [])
+            temps_min = daily_data.get('temperature_2m_min', [])
+            weather_codes = daily_data.get('weather_code', [])
             
-            # Fill in missing dates with current weather or extend forecast
+            # Build result dictionary
             result = {}
+            for i, date_str in enumerate(dates):
+                if i < len(temps_max) and i < len(temps_min) and i < len(weather_codes):
+                    result[date_str] = {
+                        'high': round(temps_max[i]),
+                        'low': round(temps_min[i]),
+                        'icon': get_weather_icon_from_wmo_code(weather_codes[i])
+                    }
+            
+            # Fill in any missing dates in the range with mock data
             current_date = start_date
             while current_date <= end_date:
                 date_key = current_date.isoformat()
-                if date_key in weather_by_date:
-                    data = weather_by_date[date_key]
-                    result[date_key] = {
-                        'high': round(data['high']),
-                        'low': round(data['low']),
-                        'icon': get_weather_icon_from_condition(data['conditions'], data['icon_id'])
-                    }
-                else:
-                    # For dates beyond forecast, use current weather or extend
-                    # Get current weather for the location
-                    if current_date == start_date:
-                        current_url = "https://api.openweathermap.org/data/2.5/weather"
-                        current_params = {
-                            'lat': lat,
-                            'lon': lon,
-                            'appid': api_key,
-                            'units': 'imperial'
-                        }
-                        try:
-                            current_response = requests.get(current_url, params=current_params, timeout=5)
-                            current_response.raise_for_status()
-                            current_data = current_response.json()
-                            temp = current_data['main']['temp']
-                            weather_main = current_data['weather'][0]['main'].lower()
-                            weather_id = current_data['weather'][0]['id']
-                            result[date_key] = {
-                                'high': round(temp + 5),  # Estimate high
-                                'low': round(temp - 5),   # Estimate low
-                                'icon': get_weather_icon_from_condition(weather_main, weather_id)
-                            }
-                        except:
-                            # Fallback to mock data
-                            result[date_key] = get_mock_weather_for_date(date_key)
-                    else:
-                        # Use mock data for dates beyond forecast
-                        result[date_key] = get_mock_weather_for_date(date_key)
+                if date_key not in result:
+                    result[date_key] = get_mock_weather_for_date(date_key)
                 current_date += timedelta(days=1)
             
             return jsonify(result)
             
         except requests.exceptions.RequestException as e:
             log_info(f"Weather API error: {e}")
-            return jsonify({'error': f'Weather API error: {str(e)}'}), 500
+            # Fallback to mock data on API error
+            log_info("Falling back to mock weather data")
+            return get_mock_weather_data(start_date, end_date, location)
         except Exception as e:
             log_info(f"Weather processing error: {e}")
-            return jsonify({'error': f'Error processing weather data: {str(e)}'}), 500
+            # Fallback to mock data on processing error
+            log_info("Falling back to mock weather data")
+            return get_mock_weather_data(start_date, end_date, location)
             
     except Exception as e:
         log_info(f"Weather endpoint error: {e}")
         return jsonify({'error': str(e)}), 500
 
-def get_weather_icon_from_condition(condition, icon_id):
-    """Map OpenWeatherMap condition to emoji icon"""
-    # Map based on OpenWeatherMap weather codes
-    if icon_id >= 200 and icon_id < 300:
-        return '⛈️'  # Thunderstorm
-    elif icon_id >= 300 and icon_id < 400:
-        return '🌧️'  # Drizzle
-    elif icon_id >= 500 and icon_id < 600:
-        return '🌧️'  # Rain
-    elif icon_id >= 600 and icon_id < 700:
-        return '❄️'  # Snow
-    elif icon_id >= 700 and icon_id < 800:
-        return '🌫️'  # Atmosphere (fog, mist, etc.)
-    elif icon_id == 800:
+def get_weather_icon_from_wmo_code(wmo_code):
+    """Map WMO weather code (Open-Meteo) to emoji icon"""
+    # WMO Weather interpretation codes (WW)
+    # See: https://open-meteo.com/en/docs
+    if wmo_code == 0:
         return '☀️'  # Clear sky
-    elif icon_id >= 801 and icon_id < 805:
-        return '⛅'  # Clouds
+    elif wmo_code in [1, 2, 3]:
+        return '⛅'  # Mainly clear, partly cloudy, overcast
+    elif wmo_code in [45, 48]:
+        return '🌫️'  # Fog and depositing rime fog
+    elif wmo_code in [51, 53, 55]:
+        return '🌦️'  # Drizzle: Light, moderate, dense intensity
+    elif wmo_code in [56, 57]:
+        return '🌨️'  # Freezing Drizzle: Light and dense intensity
+    elif wmo_code in [61, 63, 65]:
+        return '🌧️'  # Rain: Slight, moderate and heavy intensity
+    elif wmo_code in [66, 67]:
+        return '🌨️'  # Freezing Rain: Light and heavy intensity
+    elif wmo_code in [71, 73, 75]:
+        return '❄️'  # Snow fall: Slight, moderate, and heavy intensity
+    elif wmo_code == 77:
+        return '❄️'  # Snow grains
+    elif wmo_code in [80, 81, 82]:
+        return '🌧️'  # Rain showers: Slight, moderate, and violent
+    elif wmo_code in [85, 86]:
+        return '❄️'  # Snow showers slight and heavy
+    elif wmo_code == 95:
+        return '⛈️'  # Thunderstorm: Slight or moderate
+    elif wmo_code in [96, 99]:
+        return '⛈️'  # Thunderstorm with slight and heavy hail
     else:
         return '☁️'  # Default cloudy
 
