@@ -59,7 +59,7 @@
             display: grid;
             grid-template-columns: repeat(7, 1fr);
             gap: 1px;
-            background: #000000;
+            background: #e0e0e0;
             border: none;
             margin: 0;
             padding: 0;
@@ -85,7 +85,7 @@
             grid-template-columns: repeat(7, 1fr);
             grid-auto-rows: auto;
             gap: 1px;
-            background: #000000;
+            background: #e0e0e0;
             border: none;
             margin: 0;
             padding: 0;
@@ -583,6 +583,100 @@
             return d;
         }
 
+        // Calculate default row height based on available space
+        function calculateDefaultRowHeight() {
+            const header = document.querySelector('.weekdays-header');
+            const headerHeight = header ? header.offsetHeight : 60;
+            const availableHeight = window.innerHeight - headerHeight;
+            const gapSize = 1; // 1px gap between rows
+            const totalGaps = (GRID_WEEKS - 1) * gapSize;
+            return (availableHeight - totalGaps) / GRID_WEEKS;
+        }
+
+        // Calculate how many events fit within a given height for past dates
+        function calculateEventsThatFit(events, maxHeight, dayHeader, cellPadding) {
+            if (events.length === 0) {
+                return { visibleCount: 0, hiddenCount: 0 };
+            }
+
+            // Create a temporary container to measure event heights
+            const tempContainer = document.createElement('div');
+            tempContainer.style.position = 'absolute';
+            tempContainer.style.visibility = 'hidden';
+            tempContainer.style.width = '200px'; // Approximate cell width for measurement
+            tempContainer.style.padding = `${cellPadding}px`;
+            tempContainer.style.overflow = 'visible';
+            tempContainer.className = 'day-cell';
+            
+            // Clone the day header to measure its height
+            const clonedHeader = dayHeader.cloneNode(true);
+            tempContainer.appendChild(clonedHeader);
+            
+            // Measure day header height first
+            document.body.appendChild(tempContainer);
+            const headerHeight = clonedHeader.offsetHeight;
+            
+            // Calculate available height for events
+            const eventGap = 6; // gap between events (from CSS)
+            const moreEventsHeight = 30; // approximate height for "+X more" indicator
+            const availableHeightForEvents = maxHeight - headerHeight - cellPadding * 2 - moreEventsHeight;
+            
+            // Create events container
+            const tempEventsContainer = document.createElement('div');
+            tempEventsContainer.className = 'events-container';
+            tempContainer.appendChild(tempEventsContainer);
+            
+            let eventsThatFit = 0;
+            
+            // Measure each event by actually rendering it
+            for (let i = 0; i < events.length; i++) {
+                const event = events[i];
+                const isAllDay = isAllDayEvent(event);
+                const eventStart = parseLocalDate(event.start);
+                const eventEnd = parseLocalDate(event.end || event.start);
+                const now = new Date();
+                const isEventPast = eventEnd < now;
+                
+                const eventDiv = document.createElement('div');
+                let eventClass = 'event ' + getEventColor(event);
+                if (isAllDay) eventClass += ' all-day';
+                if (isEventPast) eventClass += ' past';
+                eventDiv.className = eventClass;
+                
+                const timeSpan = document.createElement('span');
+                timeSpan.className = 'event-time';
+                timeSpan.textContent = formatTime(event.start, isAllDay);
+                
+                const titleSpan = document.createElement('span');
+                titleSpan.className = 'event-title';
+                titleSpan.textContent = event.title || 'No Title';
+                
+                eventDiv.appendChild(timeSpan);
+                eventDiv.appendChild(titleSpan);
+                tempEventsContainer.appendChild(eventDiv);
+                
+                // Measure the total height after adding this event
+                const totalEventsHeight = tempEventsContainer.offsetHeight;
+                
+                // Check if adding this event would exceed available height
+                if (totalEventsHeight <= availableHeightForEvents) {
+                    eventsThatFit++;
+                } else {
+                    // This event doesn't fit, remove it and stop
+                    tempEventsContainer.removeChild(eventDiv);
+                    break;
+                }
+            }
+            
+            // Clean up
+            document.body.removeChild(tempContainer);
+            
+            return {
+                visibleCount: eventsThatFit,
+                hiddenCount: events.length - eventsThatFit
+            };
+        }
+
         function renderWeekdays() {
             const header = document.getElementById('weekdays-header');
             header.innerHTML = '';
@@ -743,7 +837,23 @@
                 eventsContainer.className = 'events-container';
                 
                 const dayEvents = eventsByDate[dateKey] || [];
-                dayEvents.forEach(event => {
+                
+                // For past dates, truncate events to fit within default row height
+                let eventsToRender = dayEvents;
+                let hiddenEventCount = 0;
+                
+                if (isPast && dayEvents.length > 0) {
+                    // Calculate default row height for this row
+                    const defaultRowHeight = calculateDefaultRowHeight();
+                    const cellPadding = 12; // From CSS: padding: 12px
+                    
+                    // Calculate how many events fit
+                    const fittingResult = calculateEventsThatFit(dayEvents, defaultRowHeight, dayHeader, cellPadding);
+                    eventsToRender = dayEvents.slice(0, fittingResult.visibleCount);
+                    hiddenEventCount = fittingResult.hiddenCount;
+                }
+                
+                eventsToRender.forEach(event => {
                     // Check if event is in the past
                     const eventStart = parseLocalDate(event.start);
                     const eventEnd = parseLocalDate(event.end || event.start);
@@ -768,6 +878,14 @@
                     eventDiv.appendChild(titleSpan);
                     eventsContainer.appendChild(eventDiv);
                 });
+                
+                // Add "+X more" indicator for past dates with hidden events
+                if (isPast && hiddenEventCount > 0) {
+                    const moreEventsDiv = document.createElement('div');
+                    moreEventsDiv.className = 'more-events';
+                    moreEventsDiv.textContent = `+${hiddenEventCount} more`;
+                    eventsContainer.appendChild(moreEventsDiv);
+                }
                 
                 dayCell.appendChild(eventsContainer);
                 grid.appendChild(dayCell);
@@ -804,8 +922,42 @@
                 }
             }
             
+            // Calculate available height directly from viewport to avoid offsetHeight rounding issues
+            const header = document.querySelector('.weekdays-header');
+            const headerHeight = header ? header.offsetHeight : 60;
+            const availableHeight = window.innerHeight - headerHeight;
+            
+            // Explicitly set grid height to match calculated available height to prevent whitespace
+            grid.style.height = `${availableHeight}px`;
+            grid.style.maxHeight = `${availableHeight}px`;
+            
+            // Calculate gap size and equal row height first (needed for past date row capping)
+            const gapSize = 1; // 1px gap between rows
+            const totalGaps = (totalRows - 1) * gapSize;
+            const equalRowHeight = (availableHeight - totalGaps) / totalRows;
+            
             // Calculate minimum height needed for each row based on content
-            const rowMinHeights = rows.map(rowCells => {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const todayKey = getDateKey(today);
+            
+            const rowMinHeights = rows.map((rowCells, rowIndex) => {
+                // Check if all cells in this row are past dates (not including today)
+                let allPast = true;
+                rowCells.forEach(cell => {
+                    // Check if this cell has the 'past' class but NOT 'today' class
+                    // Today should not be capped even though it may have past events
+                    if (!cell.classList.contains('past') || cell.classList.contains('today')) {
+                        allPast = false;
+                    }
+                });
+                
+                // If all cells are past dates (excluding today), cap at equal row height (don't allow expansion)
+                if (allPast) {
+                    return equalRowHeight;
+                }
+                
+                // Otherwise, measure content as normal
                 let maxHeight = 0;
                 rowCells.forEach(cell => {
                     // Temporarily set height to auto to measure content
@@ -818,20 +970,7 @@
             });
             
             // Calculate total minimum height needed (including gaps between rows)
-            const gapSize = 1; // 1px gap between rows
-            const totalGaps = (totalRows - 1) * gapSize;
             const totalMinHeight = rowMinHeights.reduce((sum, h) => sum + h, 0) + totalGaps;
-            // Calculate available height directly from viewport to avoid offsetHeight rounding issues
-            const header = document.querySelector('.weekdays-header');
-            const headerHeight = header ? header.offsetHeight : 60;
-            const availableHeight = window.innerHeight - headerHeight;
-            
-            // Explicitly set grid height to match calculated available height to prevent whitespace
-            grid.style.height = `${availableHeight}px`;
-            grid.style.maxHeight = `${availableHeight}px`;
-            
-            // Start with equal heights for all rows (default)
-            const equalRowHeight = (availableHeight - totalGaps) / totalRows;
             const finalHeights = new Array(totalRows).fill(equalRowHeight);
             
             // Calculate how much extra space each row needs beyond equal height
